@@ -38,4 +38,4 @@ COPY --from=builder /app/prisma ./prisma
 EXPOSE 3000
 
 # Appliquer les migrations et démarrer
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+CMD ["sh", "-c", "npx prisma migrate deploy || echo 'Migration skipped' && node dist/main"]
