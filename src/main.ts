@@ -3,6 +3,7 @@ import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
+import { json, urlencoded } from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -10,6 +11,10 @@ async function bootstrap() {
   // === SÉCURITÉ ===
   // Helmet : headers de sécurité (anti-injection, clickjacking, etc.)
   app.use(helmet());
+
+  // Limite de taille des payloads — protège contre les requêtes géantes
+  app.use(json({ limit: '1mb' }));
+  app.use(urlencoded({ extended: true, limit: '1mb' }));
 
   // Timeout global : tue toute requête > 30 secondes
   app.use((req: any, res: any, next: any) => {
@@ -28,9 +33,15 @@ async function bootstrap() {
     }),
   );
 
-  // CORS
+  // CORS — restreint en production
+  const allowedOrigins = process.env.NODE_ENV === 'production'
+    ? [
+        'https://www.silenceofceleste.com',
+        'https://silenceofceleste.com',
+      ]
+    : '*';
   app.enableCors({
-    origin: '*',
+    origin: allowedOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   });
 

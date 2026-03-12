@@ -112,8 +112,9 @@ Utilise ces informations pour personnaliser tes réponses. Réfère-toi à la do
       }
     }
 
-    // Construire les messages pour Gemini
-    const contents = dto.messages.map((m) => ({
+    // Construire les messages pour Gemini (limiter à 30 messages max pour éviter les abus de tokens)
+    const recentMessages = dto.messages.slice(-30);
+    const contents = recentMessages.map((m) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
       parts: [{ text: m.content }],
     }));

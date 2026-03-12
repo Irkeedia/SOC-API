@@ -14,16 +14,30 @@ import { EcommerceModule } from './ecommerce/ecommerce.module';
 import { SocialModule } from './social/social.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { HealthController } from './health.controller';
+import { DailyBudgetGuard } from './common/guards/daily-budget.guard';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
 
-    // Rate Limiting : max 100 requêtes / 60 secondes par IP
-    ThrottlerModule.forRoot([{
-      ttl: 60000,
-      limit: 100,
-    }]),
+    // Rate Limiting multi-profil
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60000,    // 60 secondes
+        limit: 60,     // 60 req/min par IP (réduit de 100)
+      },
+      {
+        name: 'strict',
+        ttl: 60000,    // 60 secondes
+        limit: 5,      // 5 req/min — pour les endpoints coûteux (AI/Gemini)
+      },
+      {
+        name: 'auth',
+        ttl: 60000,    // 60 secondes
+        limit: 10,     // 10 req/min — anti brute-force login/register
+      },
+    ]),
 
     PrismaModule,
     AuthModule,
@@ -39,10 +53,15 @@ import { HealthController } from './health.controller';
   ],
   controllers: [HealthController],
   providers: [
-    // Appliquer le rate limiting globalement
+    // Rate limiting global (profil "default")
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    // Budget quotidien global — coupe-circuit de sécurité
+    {
+      provide: APP_GUARD,
+      useClass: DailyBudgetGuard,
     },
   ],
 })

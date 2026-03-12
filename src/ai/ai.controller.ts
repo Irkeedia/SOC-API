@@ -3,6 +3,7 @@ import {
   Body, Param, UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AiService } from './ai.service';
@@ -16,6 +17,7 @@ export class AiController {
   constructor(private readonly aiService: AiService) {}
 
   @Post('chat')
+  @Throttle({ strict: { ttl: 60000, limit: 5 } })  // 5 appels Gemini / minute max
   @ApiOperation({ summary: 'Envoyer un message à l\'assistant IA spécialiste love dolls' })
   chat(@CurrentUser('userId') userId: string, @Body() dto: AiChatDto) {
     return this.aiService.chat(userId, dto);
