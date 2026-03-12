@@ -5,6 +5,9 @@
 # --- Étape 1 : Build ---
 FROM node:20-alpine AS builder
 
+# Installer OpenSSL (requis par Prisma)
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Copier les fichiers de dépendances
@@ -25,6 +28,9 @@ RUN npm run build
 
 # --- Étape 2 : Production ---
 FROM node:20-alpine AS production
+
+# Installer OpenSSL (requis par Prisma pour la connexion DB)
+RUN apk add --no-cache openssl
 
 WORKDIR /app
 
