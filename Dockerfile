@@ -35,7 +35,7 @@ COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/prisma ./prisma
 
 # Exposer le port
-EXPOSE 3000
+EXPOSE ${PORT:-3000}
 
-# Appliquer les migrations et démarrer
-CMD ["sh", "-c", "npx prisma migrate deploy || echo 'Migration skipped' && node dist/main"]
+# Démarrer l'API
+CMD ["node", "dist/main"]
