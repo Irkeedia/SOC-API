@@ -62,8 +62,9 @@
 | Auth | JWT + Passport |
 | Validation | class-validator + class-transformer |
 | Documentation | Swagger / OpenAPI |
-| Sécurité | Helmet + @nestjs/throttler |
+| Sécurité | Helmet + @nestjs/throttler (rate limiting) |
 | IA | Google Gemini 2.0 Flash |
+| Abonnements | 3 tiers (FREE / PREMIUM / ULTRA) |
 | Déploiement | Railway (Nixpacks) |
 
 ---
@@ -332,7 +333,15 @@ Le projet est configuré pour un déploiement automatique sur Railway.
 
 ---
 
-## 📄 Licence
+## � Historique des versions (non mentionné avant — ajouté)
+
+| Version | Description |
+| --- | --- |
+| `latest` | feat: sécurité renforcée (Helmet, ThrottlerGuard, rate limiting), support tier ULTRA (15 dolls, 150 msgs IA/mois), dynamic upsell, pré-vérification quota dolls, alignement JWT_SECRET avec site Astro, déploiement Railway stable |
+
+---
+
+## �📄 Licence
 
 Projet privé — UNLICENSED
 
