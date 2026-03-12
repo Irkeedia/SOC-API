@@ -34,8 +34,10 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   });
 
-  // Préfixe API
-  app.setGlobalPrefix('api/v1');
+  // Préfixe API (exclure le health check du préfixe)
+  app.setGlobalPrefix('api/v1', {
+    exclude: ['health'],
+  });
 
   // Swagger / OpenAPI
   const config = new DocumentBuilder()

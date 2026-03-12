@@ -13,6 +13,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { EcommerceModule } from './ecommerce/ecommerce.module';
 import { SocialModule } from './social/social.module';
 import { SubscriptionModule } from './subscription/subscription.module';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { SubscriptionModule } from './subscription/subscription.module';
     SocialModule,
     SubscriptionModule,
   ],
+  controllers: [HealthController],
   providers: [
     // Appliquer le rate limiting globalement
     {
