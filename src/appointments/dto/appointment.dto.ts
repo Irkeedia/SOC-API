@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsOptional, IsBoolean, IsDateString } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsBoolean, IsDateString, MaxLength, IsIn } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AppointmentType } from '@prisma/client';
 
@@ -18,11 +18,13 @@ export class CreateAppointmentDto {
   @ApiPropertyOptional({ example: '12 rue de la Paix, 75002 Paris' })
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   address?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   notes?: string;
 
   @ApiPropertyOptional()
@@ -43,6 +45,6 @@ export class CreateAppointmentDto {
 
 export class UpdateAppointmentStatusDto {
   @ApiProperty({ enum: ['CONFIRME', 'EN_COURS', 'TERMINE', 'ANNULE'] })
-  @IsString()
+  @IsIn(['CONFIRME', 'EN_COURS', 'TERMINE', 'ANNULE'], { message: 'Statut invalide. Valeurs acceptées : CONFIRME, EN_COURS, TERMINE, ANNULE' })
   status: string;
 }

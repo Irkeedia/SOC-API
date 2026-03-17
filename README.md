@@ -34,13 +34,13 @@
 │  ├── Helmet (sécurité headers)       │
 │  ├── ThrottlerGuard (rate limiting)  │
 │  ├── JWT Auth (Passport)             │
-│  └── 13 modules métier               │
+│  └── 14 modules métier               │
 └───────────────┬──────────────────────┘
                 │ Prisma ORM (SSL)
                 ▼
 ┌──────────────────────────┐
 │  Neon PostgreSQL         │
-│  15 tables · 16 enums    │
+│  17 tables · 17 enums    │
 └──────────────────────────┘
                 ▲
                 │ HTTPS
@@ -65,6 +65,7 @@
 | Sécurité | Helmet + @nestjs/throttler (rate limiting) |
 | IA | Google Gemini 2.0 Flash |
 | Abonnements | 3 tiers (FREE / PREMIUM / ULTRA) |
+| Emails | Resend (DKIM + SPF + DMARC) |
 | Déploiement | Railway (Nixpacks) |
 
 ---
@@ -104,8 +105,11 @@ Swagger disponible sur `http://localhost:3000/api/docs`
 |----------|-------------|---------|
 | `DATABASE_URL` | URL PostgreSQL (Prisma) | `postgresql://user:pass@host/db?sslmode=require` |
 | `JWT_SECRET` | Clé secrète pour les tokens JWT | `votre_secret_aleatoire_long` |
-| `JWT_EXPIRATION` | Durée de vie des tokens | `7d` |
+| `JWT_EXPIRATION` | Durée de vie des tokens | `1h` |
 | `GEMINI_API_KEY` | Clé API Google Gemini (IA Céleste) | `AIzaSy...` |
+| `RESEND_API_KEY` | Clé API Resend (emails transactionnels) | `re_...` |
+| `FROM_EMAIL` | Expéditeur des emails | `Silence of Céleste <noreply@silenceofceleste.com>` |
+| `PUBLIC_SITE_URL` | URL du site (liens dans les emails) | `https://www.silenceofceleste.com` |
 | `PORT` | Port du serveur | `3000` |
 | `NODE_ENV` | Environnement | `development` / `production` |
 
@@ -127,7 +131,7 @@ Swagger disponible sur `http://localhost:3000/api/docs`
 
 ---
 
-## 📡 Endpoints API (45 routes)
+## 📡 Endpoints API (50+ routes)
 
 Préfixe global : `/api/v1`
 
@@ -135,9 +139,16 @@ Préfixe global : `/api/v1`
 
 | Méthode | Route | Auth | Description |
 |---------|-------|------|-------------|
-| `POST` | `/auth/register` | ❌ | Créer un compte |
-| `POST` | `/auth/login` | ❌ | Se connecter → JWT + userId |
+| `POST` | `/auth/register` | ❌ | Créer un compte + envoi email de vérification |
+| `POST` | `/auth/login` | ❌ | Se connecter → JWT + refreshToken |
+| `POST` | `/auth/refresh` | ❌ | Rafraîchir l'access token via refresh token |
+| `POST` | `/auth/logout` | 🔒 | Révocation globale des refresh tokens |
 | `GET` | `/auth/magic-link` | 🔒 | Magic link pour connexion site web (token 5 min) |
+| `POST` | `/auth/change-password` | 🔒 | Changer son mot de passe (authentifié) |
+| `POST` | `/auth/forgot-password` | ❌ | Demander un email de réinitialisation |
+| `POST` | `/auth/reset-password` | ❌ | Réinitialiser via token email |
+| `GET` | `/auth/verify-email` | ❌ | Vérifier l'email via token |
+| `POST` | `/auth/resend-verification` | 🔒 | Renvoyer l'email de vérification |
 
 ### Users — `/users`
 
@@ -230,7 +241,7 @@ Préfixe global : `/api/v1`
 
 ## 🗄 Base de données
 
-### 15 Models
+### 18 Models
 
 | Model | Description |
 |-------|-------------|
@@ -249,10 +260,13 @@ Préfixe global : `/api/v1`
 | `DollIssue` | Signalements de problèmes |
 | `AiConversation` | Conversations avec Céleste |
 | `AiMessage` | Messages IA individuels |
+| `RefreshToken` | Tokens de rafraîchissement (rotation + détection theft) |
+| `PasswordResetToken` | Tokens de réinitialisation mot de passe (SHA-256) |
+| `EmailVerificationToken` | Tokens de vérification email (SHA-256) |
 
-### 16 Enums
+### 17 Enums
 
-`SubscriptionTier` · `ProfileVisibility` · `DollGender` · `BodyMaterial` · `HeadMaterial` · `SkinCondition` · `JointCondition` · `MaintenanceStage` · `MaintenanceAction` · `AppointmentType` · `AppointmentStatus` · `OrderStatus` · `IssueType` · `BodyZone` · `IssueSeverity` · `IssueStatus`
+`SubscriptionTier` · `ProfileVisibility` · `DollGender` · `BodyMaterial` · `HeadMaterial` · `SkinCondition` · `JointCondition` · `MaintenanceStage` · `MaintenanceAction` · `AppointmentType` · `AppointmentStatus` · `OrderStatus` · `IssueType` · `BodyZone` · `IssueSeverity` · `IssueStatus` · `Role`
 
 ---
 
@@ -260,12 +274,20 @@ Préfixe global : `/api/v1`
 
 | Protection | Détail |
 |------------|--------|
-| **Rate Limiting** | 100 requêtes / 60 secondes par IP |
+| **Rate Limiting** | 100 requêtes / 60 secondes par IP, limites spécifiques par endpoint |
 | **Helmet** | Headers de sécurité (XSS, clickjacking, MIME sniffing…) |
 | **Request Timeout** | 30 secondes max par requête |
-| **JWT Auth** | Tokens signés, expiration configurable |
+| **JWT Auth** | Access token (1h) + Refresh token (30 jours) avec rotation |
+| **Token Theft Detection** | Détection de réutilisation de refresh token → révocation cascade |
 | **Validation** | `whitelist: true` — rejette les champs non déclarés |
 | **Password Hashing** | bcrypt (12 rounds) |
+| **Anti Brute-Force** | 5 tentatives login max, lockout 15 min |
+| **Anti-Enumeration** | Réponse identique pour forgot-password que l'email existe ou non |
+| **Email Verification** | Token SHA-256 hashé, usage unique, expiration 24h |
+| **Password Reset** | Token SHA-256 hashé, usage unique, expiration 1h |
+| **Emails transactionnels** | Resend API (DKIM + SPF + DMARC via Cloudflare) |
+| **Budget quotidien** | Circuit-breaker : 10 000 requêtes/jour max |
+| **Security Logger** | Détection anomalies + alertes (login suspect, token theft) |
 | **CORS** | Configurable par environnement |
 
 ---
@@ -333,15 +355,17 @@ Le projet est configuré pour un déploiement automatique sur Railway.
 
 ---
 
-## � Historique des versions (non mentionné avant — ajouté)
+## 📜 Historique des versions
 
 | Version | Description |
 | --- | --- |
-| `latest` | feat: sécurité renforcée (Helmet, ThrottlerGuard, rate limiting), support tier ULTRA (15 dolls, 150 msgs IA/mois), dynamic upsell, pré-vérification quota dolls, alignement JWT_SECRET avec site Astro, déploiement Railway stable |
+| v3 `latest` | feat: gestion complète email/mot de passe — email verification à l'inscription, forgot/reset/change password, emails transactionnels Resend (DKIM+SPF+DMARC), refresh tokens avec rotation + détection theft, anti brute-force, security logger, budget quotidien, observabilité |
+| v2 | feat: sécurité renforcée (Helmet, ThrottlerGuard, rate limiting), support tier ULTRA, dynamic upsell, pré-vérification quota dolls, alignement JWT_SECRET avec site Astro |
+| v1 | Initial — auth JWT, modules métier (dolls, maintenance, IA, shop, social), déploiement Railway |
 
 ---
 
-## �📄 Licence
+## 📄 Licence
 
 Projet privé — UNLICENSED
 

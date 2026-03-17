@@ -15,10 +15,12 @@ import { SocialModule } from './social/social.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { HealthController } from './health.controller';
 import { DailyBudgetGuard } from './common/guards/daily-budget.guard';
+import { CommonModule } from './common/common.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    CommonModule,
 
     // Rate Limiting multi-profil
     ThrottlerModule.forRoot([

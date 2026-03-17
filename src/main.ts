@@ -9,8 +9,23 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // === SÉCURITÉ ===
-  // Helmet : headers de sécurité (anti-injection, clickjacking, etc.)
-  app.use(helmet());
+  // Helmet : headers de sécurité renforcés (CSP, anti-clickjacking, HSTS, etc.)
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+      },
+    },
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  }));
 
   // Limite de taille des payloads — protège contre les requêtes géantes
   app.use(json({ limit: '1mb' }));
@@ -43,6 +58,7 @@ async function bootstrap() {
   app.enableCors({
     origin: allowedOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
   });
 
   // Préfixe API (exclure le health check du préfixe)
@@ -50,15 +66,17 @@ async function bootstrap() {
     exclude: ['health'],
   });
 
-  // Swagger / OpenAPI
-  const config = new DocumentBuilder()
-    .setTitle('SOC API')
-    .setDescription('Synthetic Object Care — API Backend')
-    .setVersion('0.1.0')
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  // Swagger / OpenAPI — désactivé en production
+  if (process.env.NODE_ENV !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('SOC API')
+      .setDescription('Synthetic Object Care — API Backend')
+      .setVersion('0.1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');

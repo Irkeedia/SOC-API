@@ -1,15 +1,17 @@
-import { IsString, IsNumber, IsOptional, IsBoolean, IsArray, ValidateNested, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsBoolean, IsArray, ValidateNested, Min, MaxLength, IsUrl } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
 export class CreateProductDto {
   @ApiProperty({ example: 'Solution Nettoyante SOC 500ml' })
   @IsString()
+  @MaxLength(200)
   name: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   description?: string;
 
   @ApiProperty({ example: 29.99 })
@@ -19,11 +21,12 @@ export class CreateProductDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsUrl({}, { message: 'URL d\'image invalide' })
   imageUrl?: string;
 
   @ApiProperty({ example: 'nettoyage' })
   @IsString()
+  @MaxLength(50)
   category: string;
 
   @ApiPropertyOptional()
@@ -53,6 +56,7 @@ export class CreateOrderDto {
   @ApiPropertyOptional({ example: '12 rue de la Paix, 75002 Paris' })
   @IsOptional()
   @IsString()
+  @MaxLength(300)
   shippingAddress?: string;
 
   @ApiPropertyOptional({ default: true, description: 'Livraison discrète (emballage neutre)' })

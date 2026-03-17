@@ -1,15 +1,17 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsBoolean, IsDateString, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, IsBoolean, IsDateString, Min, Max, MaxLength, IsUrl } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BodyMaterial, HeadMaterial, DollGender } from '@prisma/client';
 
 export class CreateDollDto {
   @ApiProperty({ example: 'Sophia Laurent' })
   @IsString()
+  @MaxLength(100)
   fullName: string;
 
   @ApiPropertyOptional({ example: 'WM Doll' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   brand?: string;
 
   @ApiPropertyOptional({ enum: DollGender, default: 'FEMME' })
@@ -96,6 +98,7 @@ export class CreateDollDto {
   @ApiPropertyOptional({ example: 'Oreilles elfiques, tatouage bras droit' })
   @IsOptional()
   @IsString()
+  @MaxLength(1000)
   features?: string;
 
   // Entretien initial
@@ -210,41 +213,48 @@ export class UpdateDollDto {
 export class AddWardrobeItemDto {
   @ApiProperty({ example: 'Robe Bleue' })
   @IsString()
+  @MaxLength(100)
   name: string;
 
   @ApiPropertyOptional({ example: 'Robe' })
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   category?: string;
 
   @ApiPropertyOptional({ example: 'Noir' })
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   color?: string;
 
   @ApiPropertyOptional({ example: 'Soie' })
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   material?: string;
 
   @ApiPropertyOptional({ example: 'Courte' })
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   length?: string;
 
   @ApiPropertyOptional({ example: 'Dior' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   brand?: string;
 
   @ApiPropertyOptional({ example: 'Détails personnalisés...' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   notes?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsString()
+  @IsUrl({}, { message: 'URL d\'image invalide' })
   imageUrl?: string;
 }
 
@@ -252,40 +262,47 @@ export class UpdateWardrobeItemDto {
   @ApiPropertyOptional({ example: 'Robe Bleue' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   name?: string;
 
   @ApiPropertyOptional({ example: 'Robe' })
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   category?: string;
 
   @ApiPropertyOptional({ example: 'Noir' })
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   color?: string;
 
   @ApiPropertyOptional({ example: 'Soie' })
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   material?: string;
 
   @ApiPropertyOptional({ example: 'Courte' })
   @IsOptional()
   @IsString()
+  @MaxLength(50)
   length?: string;
 
   @ApiPropertyOptional({ example: 'Dior' })
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   brand?: string;
 
   @ApiPropertyOptional({ example: 'Détails personnalisés...' })
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   notes?: string;
 
   @ApiPropertyOptional({ example: 'https://...' })
   @IsOptional()
-  @IsString()
+  @IsUrl({}, { message: 'URL d\'image invalide' })
   imageUrl?: string;
 }

@@ -3,6 +3,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { EcommerceService } from './ecommerce.service';
 import { CreateProductDto, CreateOrderDto } from './dto/ecommerce.dto';
@@ -28,11 +30,11 @@ export class EcommerceController {
   }
 
   @Post('products')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Ajouter un produit (admin)' })
+  @ApiOperation({ summary: 'Ajouter un produit (admin uniquement)' })
   createProduct(@Body() dto: CreateProductDto) {
-    // TODO: ajouter un guard admin
     return this.ecommerceService.createProduct(dto);
   }
 

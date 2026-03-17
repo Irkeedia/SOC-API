@@ -7,6 +7,16 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCommentDto, VoteAdviceDto } from './dto/social.dto';
 
+// Échappement HTML simple pour les commentaires (anti-XSS stocké)
+function sanitizeHtml(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 @Injectable()
 export class SocialService {
   constructor(private readonly prisma: PrismaService) {}
@@ -53,7 +63,7 @@ export class SocialService {
         data: {
           userId,
           dollId: dto.dollId,
-          content: dto.content,
+          content: sanitizeHtml(dto.content),
         },
         include: {
           user: { select: { displayName: true, avatarUrl: true, reputationScore: true } },

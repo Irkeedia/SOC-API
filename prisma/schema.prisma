@@ -1,8 +1,3 @@
-// ===========================================
-// SOC - Prisma Schema
-// Contrat de données complet du monolithe
-// ===========================================
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,264 +7,338 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ===========================================
-// UTILISATEURS
-// ===========================================
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model advice_votes {
+  id                                   String   @id
+  voterId                              String
+  receiverId                           String
+  score                                Int
+  createdAt                            DateTime @default(now())
+  users_advice_votes_receiverIdTousers users    @relation("advice_votes_receiverIdTousers", fields: [receiverId], references: [id], onDelete: Cascade)
+  users_advice_votes_voterIdTousers    users    @relation("advice_votes_voterIdTousers", fields: [voterId], references: [id], onDelete: Cascade)
 
-enum SubscriptionTier {
-  FREE
-  PREMIUM
-  ULTRA
+  @@unique([voterId, receiverId])
 }
 
-enum ProfileVisibility {
-  PUBLIC
-  PRIVATE
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ai_conversations {
+  id          String        @id
+  userId      String
+  title       String        @default("Nouvelle conversation")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime
+  ai_messages ai_messages[]
+
+  @@index([userId])
 }
 
-model User {
-  id                String            @id @default(uuid())
-  email             String            @unique
-  passwordHash      String
-  displayName       String            @default("")
-  profileVisibility ProfileVisibility @default(PRIVATE)
-  subscriptionTier  SubscriptionTier  @default(FREE)
-  avatarUrl         String?
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ai_messages {
+  id               String           @id
+  conversationId   String
+  role             String
+  content          String
+  createdAt        DateTime         @default(now())
+  ai_conversations ai_conversations @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  // Profil (utilisé par le site vitrine)
-  firstName String @default("")
-  lastName  String @default("")
-  phone     String @default("")
-  address   String @default("")
+  @@index([conversationId])
+}
 
-  // Limites Freemium
-  dailyCommentCount Int @default(0)
-  dailyCommentReset DateTime @default(now())
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model appointments {
+  id               String            @id
+  userId           String
+  dollId           String
+  type             AppointmentType
+  status           AppointmentStatus @default(DEMANDE)
+  scheduledAt      DateTime
+  address          String?
+  notes            String?
+  isStorageService Boolean           @default(false)
+  storageStartAt   DateTime?
+  storageEndAt     DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime
+  dolls            dolls             @relation(fields: [dollId], references: [id], onDelete: Cascade)
+  users            users             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Quotas IA mensuels
-  aiMessageCount    Int      @default(0)
-  aiMessageResetAt  DateTime @default(now())
+  @@index([dollId])
+  @@index([scheduledAt])
+  @@index([userId])
+}
 
-  // Réputation sociale
-  adviceScore    Int   @default(0)
-  adviceVotes    Int   @default(0)
-  reputationScore Float @default(0)
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model doll_issues {
+  id          String        @id
+  dollId      String
+  type        IssueType
+  bodyZone    BodyZone
+  severity    IssueSeverity @default(LEGERE)
+  status      IssueStatus   @default(SIGNALE)
+  title       String
+  description String?
+  repairPlan  String?
+  repairNotes String?
+  repairCost  Float?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime
+  resolvedAt  DateTime?
+  dolls       dolls         @relation(fields: [dollId], references: [id], onDelete: Cascade)
 
-  // Paramètres
-  darkMode Boolean @default(false)
+  @@index([dollId])
+  @@index([status])
+}
 
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model doll_photos {
+  id        String   @id
+  dollId    String
+  url       String
+  caption   String?
+  sortOrder Int      @default(0)
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  dolls     dolls    @relation(fields: [dollId], references: [id], onDelete: Cascade)
 
-  // Relations
-  dolls              Doll[]
-  appointments       Appointment[]
-  orders             Order[]
-  socialComments     SocialComment[]
-  socialLikes        SocialLike[]
-  sentAdviceVotes    AdviceVote[]      @relation("VoterAdvice")
-  receivedAdviceVotes AdviceVote[]     @relation("ReceiverAdvice")
-
-  @@map("users")
+  @@index([dollId])
 }
 
-// ===========================================
-// DOLLS (Entité Critique)
-// ===========================================
-
-enum DollGender {
-  FEMME
-  HOMME
-  AUTRE
-}
-
-enum BodyMaterial {
-  SILICONE
-  TPE
-  HYBRID
-}
-
-enum HeadMaterial {
-  SILICONE
-  TPE
-  VINYL
-}
-
-enum SkinCondition {
-  IDEALE
-  BONNE
-  USURE_LEGERE
-  DEGRADEE
-  CRITIQUE
-}
-
-enum JointCondition {
-  NEUVE
-  BONNE
-  LEGERE_FISSURE
-  USEE
-  CASSEE
-}
-
-enum MaintenanceStage {
-  OPTIMAL
-  SECHAGE_RECOMMANDE
-  HUMIDITE_STAGNANTE
-  POUDRAGE_NECESSAIRE
-  PROLIFERATION_BACTERIENNE
-  FRAGILISATION_STRUCTURE
-  INTERVENTION_URGENTE
-}
-
-model Doll {
-  id        String   @id @default(uuid())
-  ownerId   String
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-
-  // Identification
-  fullName        String
-  brand           String?
-  gender          DollGender   @default(FEMME)
-  acquisitionDate DateTime     @default(now())
-
-  // Apparence
-  skinTone    String?   // "Claire", "Naturelle", "Bronzée", "Mate", "Foncée", "Ébène"
-  eyeColor    String?   // "Bleu", "Vert", "Marron", "Noisette", "Gris", "Noir"
-  hairColor   String?   // "Blond", "Brun", "Noir", "Roux", "Blanc", "Rose"...
-  hairLength  String?   // "Court", "Mi-long", "Long", "Très long"
-  hairStyle   String?   // "Lisse", "Ondulé", "Bouclé", "Frisé"
-
-  // Specs physiques
-  bodyMaterial BodyMaterial @default(TPE)
-  headMaterial HeadMaterial @default(TPE)
-  sizeCm       Float?
-  weightKg     Float?
-  bustSize     Float?    // cm tour de poitrine
-  waistSize    Float?    // cm tour de taille
-  hipSize      Float?    // cm tour de hanches
-  footSize     Float?    // pointure
-
-  // Notes / caractéristiques spéciales
-  features     String?
-
-  // Photos
-  photos    DollPhoto[]
-
-  // Garde-robe virtuelle
-  wardrobe  WardrobeItem[]
-
-  // === MAINTENANCE (Axe I) ===
-  lastWashedAt      DateTime?
-  skinCondition     SkinCondition    @default(IDEALE)
-  jointCondition    JointCondition   @default(NEUVE)
-  fissureCount      Int              @default(0)
-  maintenanceStage  MaintenanceStage @default(OPTIMAL)
-  degradationLevel  Int              @default(0)  // 0-100
-  statusMessage     String           @default("Tout est en ordre.")
-
-  // Premium
-  isPremiumAsset Boolean @default(false)
-
-  // Social
-  viewCount  Int @default(0)
-  likeCount  Int @default(0)
-  shareCount Int @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  maintenanceHistory MaintenanceRecord[]
-  issues             DollIssue[]
-  appointments       Appointment[]
-  socialComments     SocialComment[]
-  socialLikes        SocialLike[]
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model dolls {
+  id                  String                @id
+  ownerId             String
+  fullName            String
+  brand               String?
+  bodyMaterial        BodyMaterial          @default(TPE)
+  headMaterial        HeadMaterial          @default(TPE)
+  sizeCm              Float?
+  weightKg            Float?
+  lastWashedAt        DateTime?
+  skinCondition       SkinCondition         @default(IDEALE)
+  jointCondition      JointCondition        @default(NEUVE)
+  fissureCount        Int                   @default(0)
+  maintenanceStage    MaintenanceStage      @default(OPTIMAL)
+  degradationLevel    Int                   @default(0)
+  statusMessage       String                @default("Tout est en ordre.")
+  isPremiumAsset      Boolean               @default(false)
+  viewCount           Int                   @default(0)
+  likeCount           Int                   @default(0)
+  shareCount          Int                   @default(0)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime
+  acquisitionDate     DateTime              @default(now())
+  bustSize            Float?
+  eyeColor            String?
+  features            String?
+  footSize            Float?
+  gender              DollGender            @default(FEMME)
+  hairColor           String?
+  hairLength          String?
+  hairStyle           String?
+  hipSize             Float?
+  skinTone            String?
+  waistSize           Float?
+  appointments        appointments[]
+  doll_issues         doll_issues[]
+  doll_photos         doll_photos[]
+  users               users                 @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  maintenance_records maintenance_records[]
+  social_comments     social_comments[]
+  social_likes        social_likes[]
+  wardrobe_items      wardrobe_items[]
 
   @@index([ownerId])
-  @@map("dolls")
 }
 
-model DollPhoto {
-  id     String @id @default(uuid())
-  dollId String
-  doll   Doll   @relation(fields: [dollId], references: [id], onDelete: Cascade)
-  url    String
-  caption String?
-  sortOrder Int @default(0)
-  createdAt DateTime @default(now())
+model email_verification_tokens {
+  id        String    @id
+  tokenHash String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  users     users     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([dollId])
-  @@map("doll_photos")
+  @@index([userId])
 }
 
-model WardrobeItem {
-  id         String   @id @default(uuid())
-  dollId     String
-  doll       Doll     @relation(fields: [dollId], references: [id], onDelete: Cascade)
-  name       String
-  category   String?  // "Robe", "Top", "Bas", "Lingerie", "Chaussures", "Accessoire", "Ensemble"
-  color      String?  // "Noir", "Blanc", "Rouge", "Bleu"...
-  material   String?  // "Coton", "Soie", "Dentelle", "Cuir", "Synthétique"...
-  length     String?  // "Courte", "Mi-longue", "Longue"
-  brand      String?  // Marque du vêtement
-  notes      String?  // Détails personnalisés
-  imageUrl   String?
-  acquiredAt DateTime @default(now())
-
-  @@index([dollId])
-  @@map("wardrobe_items")
-}
-
-// ===========================================
-// MAINTENANCE & ENTRETIEN (Axe I)
-// ===========================================
-
-enum MaintenanceAction {
-  LAVAGE
-  POUDRAGE
-  SECHAGE
-  REPARATION_ARTICULATION
-  REPARATION_PEAU
-  CONTROLE_ETAT
-  DESINFECTION
-  MAQUILLAGE
-  COIFFURE
-  HYDRATATION_TPE
-  NETTOYAGE_ORIFICES
-  SERRAGE_ARTICULATIONS
-  PREPARATION_STOCKAGE
-  TRAITEMENT_TACHES
-  AUTRE
-}
-
-model MaintenanceRecord {
-  id       String            @id @default(uuid())
-  dollId   String
-  doll     Doll              @relation(fields: [dollId], references: [id], onDelete: Cascade)
-  action   MaintenanceAction
-  notes    String?
-  performedBy String?        // "owner" ou "technician:{id}"
-  performedAt DateTime       @default(now())
-
-  // Snapshot de l'état après maintenance
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model maintenance_records {
+  id               String            @id
+  dollId           String
+  action           MaintenanceAction
+  notes            String?
+  performedBy      String?
+  performedAt      DateTime          @default(now())
   degradationAfter Int?
   stageAfter       MaintenanceStage?
+  dolls            dolls             @relation(fields: [dollId], references: [id], onDelete: Cascade)
 
   @@index([dollId])
   @@index([performedAt])
-  @@map("maintenance_records")
 }
 
-// ===========================================
-// RENDEZ-VOUS & SERVICES (Logistique)
-// ===========================================
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model order_items {
+  id        String   @id
+  orderId   String
+  productId String
+  quantity  Int
+  unitPrice Float
+  image     String   @default("")
+  title     String   @default("")
+  orders    orders   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  products  products @relation(fields: [productId], references: [id])
 
-enum AppointmentType {
-  NETTOYAGE
-  POUDRAGE
-  CONTROLE_ETAT
-  REPARATION
-  GARDIENNAGE
+  @@index([orderId])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model orders {
+  id              String        @id
+  userId          String?
+  status          OrderStatus   @default(EN_ATTENTE)
+  total           Float
+  currency        String        @default("EUR")
+  shippingAddress String?
+  isDiscreet      Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime
+  email           String?
+  shippingCity    String?
+  shippingCountry String        @default("FR")
+  shippingName    String?
+  shippingZip     String?
+  stripePaymentId String?
+  stripeSessionId String?       @unique
+  order_items     order_items[]
+  users           users?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model password_reset_tokens {
+  id        String    @id
+  tokenHash String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  users     users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model products {
+  id          String        @id
+  name        String
+  description String?
+  price       Float
+  currency    String        @default("EUR")
+  imageUrl    String?
+  category    String
+  inStock     Boolean       @default(true)
+  stockQty    Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime
+  order_items order_items[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model refresh_tokens {
+  id        String    @id
+  tokenHash String    @unique
+  userId    String
+  userAgent String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  users     users     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([userId])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model social_comments {
+  id        String   @id
+  userId    String
+  dollId    String
+  content   String
+  createdAt DateTime @default(now())
+  dolls     dolls    @relation(fields: [dollId], references: [id], onDelete: Cascade)
+  users     users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([dollId])
+  @@index([userId])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model social_likes {
+  id        String   @id
+  userId    String
+  dollId    String
+  createdAt DateTime @default(now())
+  dolls     dolls    @relation(fields: [dollId], references: [id], onDelete: Cascade)
+  users     users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dollId])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model users {
+  id                                          String                      @id
+  email                                       String                      @unique
+  passwordHash                                String
+  displayName                                 String                      @default("")
+  profileVisibility                           ProfileVisibility           @default(PRIVATE)
+  subscriptionTier                            SubscriptionTier            @default(FREE)
+  avatarUrl                                   String?
+  dailyCommentCount                           Int                         @default(0)
+  dailyCommentReset                           DateTime                    @default(now())
+  adviceScore                                 Int                         @default(0)
+  adviceVotes                                 Int                         @default(0)
+  reputationScore                             Float                       @default(0)
+  darkMode                                    Boolean                     @default(false)
+  createdAt                                   DateTime                    @default(now())
+  updatedAt                                   DateTime
+  address                                     String                      @default("")
+  firstName                                   String                      @default("")
+  lastName                                    String                      @default("")
+  phone                                       String                      @default("")
+  aiMessageCount                              Int                         @default(0)
+  aiMessageResetAt                            DateTime                    @default(now())
+  role                                        Role                        @default(USER)
+  emailVerified                               Boolean                     @default(false)
+  advice_votes_advice_votes_receiverIdTousers advice_votes[]              @relation("advice_votes_receiverIdTousers")
+  advice_votes_advice_votes_voterIdTousers    advice_votes[]              @relation("advice_votes_voterIdTousers")
+  appointments                                appointments[]
+  dolls                                       dolls[]
+  email_verification_tokens                   email_verification_tokens[]
+  orders                                      orders[]
+  password_reset_tokens                       password_reset_tokens[]
+  refresh_tokens                              refresh_tokens[]
+  social_comments                             social_comments[]
+  social_likes                                social_likes[]
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model wardrobe_items {
+  id         String   @id
+  dollId     String
+  name       String
+  category   String?
+  color      String?
+  material   String?
+  length     String?
+  brand      String?
+  notes      String?
+  imageUrl   String?
+  acquiredAt DateTime @default(now())
+  dolls      dolls    @relation(fields: [dollId], references: [id], onDelete: Cascade)
+
+  @@index([dollId])
 }
 
 enum AppointmentStatus {
@@ -280,167 +349,18 @@ enum AppointmentStatus {
   ANNULE
 }
 
-model Appointment {
-  id        String            @id @default(uuid())
-  userId    String
-  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dollId    String
-  doll      Doll              @relation(fields: [dollId], references: [id], onDelete: Cascade)
-
-  type      AppointmentType
-  status    AppointmentStatus @default(DEMANDE)
-
-  scheduledAt DateTime
-  address     String?
-  notes       String?
-
-  // Gardiennage
-  isStorageService Boolean  @default(false)
-  storageStartAt   DateTime?
-  storageEndAt     DateTime?
-
-  completedAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([userId])
-  @@index([dollId])
-  @@index([scheduledAt])
-  @@map("appointments")
+enum AppointmentType {
+  NETTOYAGE
+  POUDRAGE
+  CONTROLE_ETAT
+  REPARATION
+  GARDIENNAGE
 }
 
-// ===========================================
-// E-COMMERCE (Axe II)
-// ===========================================
-
-model Product {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  price       Float
-  currency    String   @default("EUR")
-  imageUrl    String?
-  category    String   // "nettoyage", "poudrage", "reparation", "accessoire"
-  inStock     Boolean  @default(true)
-  stockQty    Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  orderItems OrderItem[]
-
-  @@map("products")
-}
-
-enum OrderStatus {
-  EN_ATTENTE
-  PAYEE
-  EXPEDIEE
-  LIVREE
-  ANNULEE
-  REMBOURSEE
-}
-
-model Order {
-  id       String      @id @default(uuid())
-  userId   String?
-  user     User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status   OrderStatus @default(EN_ATTENTE)
-  total    Float
-  currency String      @default("EUR")
-
-  // Stripe (utilisé par le site vitrine)
-  stripeSessionId String?  @unique
-  stripePaymentId String?
-  email           String?
-
-  // Livraison
-  shippingName    String?
-  shippingAddress String?
-  shippingCity    String?
-  shippingZip     String?
-  shippingCountry String   @default("FR")
-  isDiscreet      Boolean  @default(true)
-
-  items     OrderItem[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@map("orders")
-}
-
-model OrderItem {
-  id        String  @id @default(uuid())
-  orderId   String
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  productId String
-  product   Product? @relation(fields: [productId], references: [id])
-  quantity  Int
-  unitPrice Float
-  title     String  @default("")
-  image     String  @default("")
-
-  @@index([orderId])
-  @@map("order_items")
-}
-
-// ===========================================
-// SOCIAL & RÉPUTATION (Axe III)
-// ===========================================
-
-model SocialComment {
-  id      String @id @default(uuid())
-  userId  String
-  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dollId  String
-  doll    Doll   @relation(fields: [dollId], references: [id], onDelete: Cascade)
-  content String
-  createdAt DateTime @default(now())
-
-  @@index([dollId])
-  @@index([userId])
-  @@map("social_comments")
-}
-
-model SocialLike {
-  id     String @id @default(uuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  dollId String
-  doll   Doll   @relation(fields: [dollId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-
-  @@unique([userId, dollId])
-  @@map("social_likes")
-}
-
-model AdviceVote {
-  id         String @id @default(uuid())
-  voterId    String
-  voter      User   @relation("VoterAdvice", fields: [voterId], references: [id], onDelete: Cascade)
-  receiverId String
-  receiver   User   @relation("ReceiverAdvice", fields: [receiverId], references: [id], onDelete: Cascade)
-  score      Int    // 1-5
-  createdAt  DateTime @default(now())
-
-  @@unique([voterId, receiverId])
-  @@map("advice_votes")
-}
-
-// ===========================================
-// SIGNALEMENTS / PROBLÈMES DOLLS
-// ===========================================
-
-enum IssueType {
-  FISSURE
-  ARTICULATION_LACHE
-  DECOLORATION
-  MOISISSURE
-  TACHE
-  DECHIRURE
-  ODEUR
-  USURE
-  AUTRE
+enum BodyMaterial {
+  SILICONE
+  TPE
+  HYBRID
 }
 
 enum BodyZone {
@@ -472,6 +392,18 @@ enum BodyZone {
   AUTRE
 }
 
+enum DollGender {
+  FEMME
+  HOMME
+  AUTRE
+}
+
+enum HeadMaterial {
+  SILICONE
+  TPE
+  VINYL
+}
+
 enum IssueSeverity {
   LEGERE
   MODEREE
@@ -487,55 +419,83 @@ enum IssueStatus {
   IRRECUPERABLE
 }
 
-model DollIssue {
-  id        String   @id @default(uuid())
-  dollId    String
-  doll      Doll     @relation(fields: [dollId], references: [id], onDelete: Cascade)
-
-  type       IssueType
-  bodyZone   BodyZone
-  severity   IssueSeverity  @default(LEGERE)
-  status     IssueStatus    @default(SIGNALE)
-
-  title       String
-  description String?
-  repairPlan  String?       // Ce que l'utilisateur compte faire
-  repairNotes String?       // Ce qui a été fait
-  repairCost  Float?        // Coût de réparation estimé/réel
-
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  resolvedAt DateTime?
-
-  @@index([dollId])
-  @@index([status])
-  @@map("doll_issues")
+enum IssueType {
+  FISSURE
+  ARTICULATION_LACHE
+  DECOLORATION
+  MOISISSURE
+  TACHE
+  DECHIRURE
+  ODEUR
+  USURE
+  AUTRE
 }
 
-// ===========================================
-// CONVERSATIONS IA
-// ===========================================
-
-model AiConversation {
-  id       String   @id @default(uuid())
-  userId   String
-  title    String   @default("Nouvelle conversation")
-  messages AiMessage[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@map("ai_conversations")
+enum JointCondition {
+  NEUVE
+  BONNE
+  LEGERE_FISSURE
+  USEE
+  CASSEE
 }
 
-model AiMessage {
-  id             String @id @default(uuid())
-  conversationId String
-  conversation   AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  role           String   // "user" or "assistant"
-  content        String
-  createdAt      DateTime @default(now())
+enum MaintenanceAction {
+  LAVAGE
+  POUDRAGE
+  SECHAGE
+  REPARATION_ARTICULATION
+  REPARATION_PEAU
+  CONTROLE_ETAT
+  DESINFECTION
+  AUTRE
+  MAQUILLAGE
+  COIFFURE
+  HYDRATATION_TPE
+  NETTOYAGE_ORIFICES
+  SERRAGE_ARTICULATIONS
+  PREPARATION_STOCKAGE
+  TRAITEMENT_TACHES
+}
 
-  @@index([conversationId])
-  @@map("ai_messages")
+enum MaintenanceStage {
+  OPTIMAL
+  SECHAGE_RECOMMANDE
+  HUMIDITE_STAGNANTE
+  POUDRAGE_NECESSAIRE
+  PROLIFERATION_BACTERIENNE
+  FRAGILISATION_STRUCTURE
+  INTERVENTION_URGENTE
+}
+
+enum OrderStatus {
+  EN_ATTENTE
+  PAYEE
+  EXPEDIEE
+  LIVREE
+  ANNULEE
+  REMBOURSEE
+}
+
+enum ProfileVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum SkinCondition {
+  IDEALE
+  BONNE
+  USURE_LEGERE
+  DEGRADEE
+  CRITIQUE
+}
+
+enum SubscriptionTier {
+  FREE
+  PREMIUM
+  ULTRA
 }
