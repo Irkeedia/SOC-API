@@ -18,7 +18,7 @@ export class MaintenanceService {
    */
   async recordMaintenance(userId: string, dto: CreateMaintenanceRecordDto) {
     // Vérifier ownership
-    const doll = await this.prisma.doll.findUnique({
+    const doll = await this.prisma.dolls.findUnique({
       where: { id: dto.dollId },
     });
     if (!doll) throw new NotFoundException('Doll introuvable.');
@@ -59,7 +59,7 @@ export class MaintenanceService {
     // MAQUILLAGE, COIFFURE, PREPARATION_STOCKAGE = pas d'effet maintenance, juste un log
 
     // Mettre à jour la doll
-    const updatedDoll = await this.prisma.doll.update({
+    const updatedDoll = await this.prisma.dolls.update({
       where: { id: dto.dollId },
       data: updateData,
     });
@@ -68,7 +68,7 @@ export class MaintenanceService {
     const deg = this.degradation.computeDegradation(updatedDoll);
 
     // Mettre à jour les champs de dégradation
-    await this.prisma.doll.update({
+    await this.prisma.dolls.update({
       where: { id: dto.dollId },
       data: {
         degradationLevel: deg.level,
@@ -78,7 +78,7 @@ export class MaintenanceService {
     });
 
     // Créer l'enregistrement d'historique
-    const record = await this.prisma.maintenanceRecord.create({
+    const record = await this.prisma.maintenance_records.create({
       data: {
         dollId: dto.dollId,
         action: dto.action,
@@ -100,11 +100,11 @@ export class MaintenanceService {
   }
 
   async getHistory(dollId: string, userId: string) {
-    const doll = await this.prisma.doll.findUnique({ where: { id: dollId } });
+    const doll = await this.prisma.dolls.findUnique({ where: { id: dollId } });
     if (!doll) throw new NotFoundException('Doll introuvable.');
     if (doll.ownerId !== userId) throw new ForbiddenException();
 
-    return this.prisma.maintenanceRecord.findMany({
+    return this.prisma.maintenance_records.findMany({
       where: { dollId },
       orderBy: { performedAt: 'desc' },
     });
@@ -116,10 +116,10 @@ export class MaintenanceService {
    * avec alertes et recommandations.
    */
   async getDashboard(userId: string) {
-    const dolls = await this.prisma.doll.findMany({
+    const dolls = await this.prisma.dolls.findMany({
       where: { ownerId: userId },
       include: {
-        maintenanceHistory: {
+        maintenance_records: {
           orderBy: { performedAt: 'desc' },
           take: 1,
         },
@@ -133,7 +133,7 @@ export class MaintenanceService {
         fullName: doll.fullName,
         bodyMaterial: doll.bodyMaterial,
         lastWashedAt: doll.lastWashedAt,
-        lastMaintenance: doll.maintenanceHistory[0] || null,
+        lastMaintenance: doll.maintenance_records[0] || null,
         degradationLevel: deg.level,
         maintenanceStage: deg.stage,
         statusMessage: deg.message,

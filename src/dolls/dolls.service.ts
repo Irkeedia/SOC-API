@@ -34,7 +34,7 @@ export class DollsService {
     const lastWashedAt = dto.initialMaintenanceDone ? new Date() : new Date();
     // Note: on met toujours lastWashedAt = now pour une doll neuve (elle sort du carton propre)
 
-    const doll = await this.prisma.doll.create({
+    const doll = await this.prisma.dolls.create({
       data: {
         ownerId: userId,
         fullName: dto.fullName,
@@ -60,7 +60,7 @@ export class DollsService {
         maintenanceStage: 'OPTIMAL',
         statusMessage: 'Tout est en ordre.',
       },
-      include: { photos: true, wardrobe: true },
+      include: { doll_photos: true, wardrobe_items: true },
     });
 
     // Créer les enregistrements d'entretien initial si spécifiés
@@ -73,7 +73,7 @@ export class DollsService {
       ];
       for (const action of dto.initialActions) {
         if (validActions.includes(action)) {
-          await this.prisma.maintenanceRecord.create({
+          await this.prisma.maintenance_records.create({
             data: {
               dollId: doll.id,
               action: action as any,
@@ -91,11 +91,11 @@ export class DollsService {
   }
 
   async findAllByUser(userId: string) {
-    const dolls = await this.prisma.doll.findMany({
+    const dolls = await this.prisma.dolls.findMany({
       where: { ownerId: userId },
       include: {
-        photos: { orderBy: { sortOrder: 'asc' }, take: 1 },
-        _count: { select: { maintenanceHistory: true } },
+        doll_photos: { orderBy: { sortOrder: 'asc' }, take: 1 },
+        _count: { select: { maintenance_records: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -113,13 +113,13 @@ export class DollsService {
   }
 
   async findOne(dollId: string, userId: string) {
-    const doll = await this.prisma.doll.findUnique({
+    const doll = await this.prisma.dolls.findUnique({
       where: { id: dollId },
       include: {
-        photos: { orderBy: { sortOrder: 'asc' } },
-        wardrobe: { orderBy: { acquiredAt: 'desc' } },
-        maintenanceHistory: { orderBy: { performedAt: 'desc' }, take: 20 },
-        issues: { orderBy: [{ status: 'asc' }, { createdAt: 'desc' }] },
+        doll_photos: { orderBy: { sortOrder: 'asc' } },
+        wardrobe_items: { orderBy: { acquiredAt: 'desc' } },
+        maintenance_records: { orderBy: { performedAt: 'desc' }, take: 20 },
+        doll_issues: { orderBy: [{ status: 'asc' }, { createdAt: 'desc' }] },
       },
     });
     if (!doll) throw new NotFoundException('Doll introuvable.');
@@ -139,7 +139,7 @@ export class DollsService {
 
   async update(dollId: string, userId: string, dto: UpdateDollDto) {
     const doll = await this.ensureOwnership(dollId, userId);
-    return this.prisma.doll.update({
+    return this.prisma.dolls.update({
       where: { id: dollId },
       data: dto,
     });
@@ -147,7 +147,7 @@ export class DollsService {
 
   async remove(dollId: string, userId: string) {
     await this.ensureOwnership(dollId, userId);
-    return this.prisma.doll.delete({ where: { id: dollId } });
+    return this.prisma.dolls.delete({ where: { id: dollId } });
   }
 
   // === Garde-robe ===
@@ -160,30 +160,30 @@ export class DollsService {
       );
     }
     await this.ensureOwnership(dollId, userId);
-    return this.prisma.wardrobeItem.create({
+    return this.prisma.wardrobe_items.create({
       data: { dollId, ...dto },
     });
   }
 
   async removeWardrobeItem(itemId: string, userId: string) {
-    const item = await this.prisma.wardrobeItem.findUnique({
+    const item = await this.prisma.wardrobe_items.findUnique({
       where: { id: itemId },
-      include: { doll: { select: { ownerId: true } } },
+      include: { dolls: { select: { ownerId: true } } },
     });
     if (!item) throw new NotFoundException('Article introuvable.');
-    if (item.doll.ownerId !== userId) throw new ForbiddenException();
-    return this.prisma.wardrobeItem.delete({ where: { id: itemId } });
+    if (item.dolls.ownerId !== userId) throw new ForbiddenException();
+    return this.prisma.wardrobe_items.delete({ where: { id: itemId } });
   }
 
   async updateWardrobeItem(itemId: string, userId: string, dto: UpdateWardrobeItemDto) {
-    const item = await this.prisma.wardrobeItem.findUnique({
+    const item = await this.prisma.wardrobe_items.findUnique({
       where: { id: itemId },
-      include: { doll: { select: { ownerId: true } } },
+      include: { dolls: { select: { ownerId: true } } },
     });
     if (!item) throw new NotFoundException('Article introuvable.');
-    if (item.doll.ownerId !== userId) throw new ForbiddenException();
+    if (item.dolls.ownerId !== userId) throw new ForbiddenException();
 
-    return this.prisma.wardrobeItem.update({
+    return this.prisma.wardrobe_items.update({
       where: { id: itemId },
       data: dto,
     });
@@ -192,9 +192,9 @@ export class DollsService {
   // === Dolls publiques (Social) ===
   async findPublicDolls(page = 1, limit = 20) {
     const skip = (page - 1) * limit;
-    return this.prisma.doll.findMany({
+    return this.prisma.dolls.findMany({
       where: {
-        owner: { profileVisibility: 'PUBLIC' },
+        users: { profileVisibility: 'PUBLIC' },
       },
       select: {
         id: true,
@@ -204,8 +204,8 @@ export class DollsService {
         sizeCm: true,
         viewCount: true,
         likeCount: true,
-        photos: { take: 1, orderBy: { sortOrder: 'asc' } },
-        owner: { select: { displayName: true, reputationScore: true } },
+        doll_photos: { take: 1, orderBy: { sortOrder: 'asc' } },
+        users: { select: { displayName: true, reputationScore: true } },
       },
       orderBy: { likeCount: 'desc' },
       skip,
@@ -214,7 +214,7 @@ export class DollsService {
   }
 
   private async ensureOwnership(dollId: string, userId: string) {
-    const doll = await this.prisma.doll.findUnique({ where: { id: dollId } });
+    const doll = await this.prisma.dolls.findUnique({ where: { id: dollId } });
     if (!doll) throw new NotFoundException('Doll introuvable.');
     if (doll.ownerId !== userId) throw new ForbiddenException('Accès non autorisé.');
     return doll;

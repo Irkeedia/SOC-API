@@ -10,7 +10,7 @@ export class SubscriptionService {
    * Retourne les infos de plan de l'utilisateur + quotas restants.
    */
   async getUserPlan(userId: string) {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.users.findUnique({
       where: { id: userId },
       select: {
         subscriptionTier: true,
@@ -103,7 +103,7 @@ export class SubscriptionService {
    * Remet le compteur IA à 0 et met à jour la date de reset.
    */
   async resetAiCount(userId: string) {
-    await this.prisma.user.update({
+    await this.prisma.users.update({
       where: { id: userId },
       data: {
         aiMessageCount: 0,
@@ -117,7 +117,7 @@ export class SubscriptionService {
    * Retourne { allowed: boolean, remaining: number }.
    */
   async consumeAiMessage(userId: string): Promise<{ allowed: boolean; remaining: number; limit: number }> {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.users.findUnique({
       where: { id: userId },
       select: { subscriptionTier: true, aiMessageCount: true, aiMessageResetAt: true },
     });
@@ -138,7 +138,7 @@ export class SubscriptionService {
     }
 
     // Incrémente
-    await this.prisma.user.update({
+    await this.prisma.users.update({
       where: { id: userId },
       data: { aiMessageCount: count + 1 },
     });
@@ -150,7 +150,7 @@ export class SubscriptionService {
    * Vérifie si l'utilisateur peut créer une doll supplémentaire.
    */
   async canCreateDoll(userId: string): Promise<{ allowed: boolean; maxDolls: number; currentDolls: number }> {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.users.findUnique({
       where: { id: userId },
       select: { subscriptionTier: true, _count: { select: { dolls: true } } },
     });
@@ -167,7 +167,7 @@ export class SubscriptionService {
    * Vérifie si l'utilisateur a accès à la garde-robe.
    */
   async hasWardrobeAccess(userId: string): Promise<boolean> {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.users.findUnique({
       where: { id: userId },
       select: { subscriptionTier: true },
     });

@@ -63,16 +63,16 @@ export class AiService {
     // Construire le contexte doll si dollId fourni
     let dollContext = '';
     if (dto.dollId) {
-      const doll: any = await this.prisma.doll.findFirst({
+      const doll: any = await this.prisma.dolls.findFirst({
         where: { id: dto.dollId, ownerId: userId },
         include: {
-          issues: { orderBy: [{ status: 'asc' }, { createdAt: 'desc' }], take: 20 },
-          maintenanceHistory: { orderBy: { performedAt: 'desc' }, take: 15 },
+          doll_issues: { orderBy: [{ status: 'asc' }, { createdAt: 'desc' }], take: 20 },
+          maintenance_records: { orderBy: { performedAt: 'desc' }, take: 15 },
         },
       } as any);
       if (doll) {
-        const activeIssues = doll.issues.filter((i: any) => i.status !== 'REPARE' && i.status !== 'IRRECUPERABLE');
-        const resolvedIssues = doll.issues.filter((i: any) => i.status === 'REPARE' || i.status === 'IRRECUPERABLE');
+        const activeIssues = doll.doll_issues.filter((i: any) => i.status !== 'REPARE' && i.status !== 'IRRECUPERABLE');
+        const resolvedIssues = doll.doll_issues.filter((i: any) => i.status === 'REPARE' || i.status === 'IRRECUPERABLE');
         dollContext = `\n\n=== PROFIL DE LA DOLL DE L'UTILISATEUR ===
 Nom complet : ${doll.fullName || 'Non renseigné'}
 Genre : ${doll.gender || 'Non précisé'}
@@ -106,7 +106,7 @@ ${activeIssues.length > 0 ? activeIssues.map((i: any) => `- [${i.type}] ${i.titl
 ${resolvedIssues.length > 0 ? resolvedIssues.slice(0, 5).map((i: any) => `- [${i.type}] ${i.title} @ ${i.bodyZone} → ${i.status}${i.repairNotes ? ' — ' + i.repairNotes : ''}`).join('\n') : 'Aucun'}
 
 === DERNIERS ENTRETIENS ===
-${doll.maintenanceHistory.length > 0 ? doll.maintenanceHistory.map((h: any) => `- ${new Date(h.performedAt).toLocaleDateString('fr-FR')} : ${h.action}${h.notes ? ' — ' + h.notes : ''}`).join('\n') : 'Aucun entretien enregistré'}
+${doll.maintenance_records.length > 0 ? doll.maintenance_records.map((h: any) => `- ${new Date(h.performedAt).toLocaleDateString('fr-FR')} : ${h.action}${h.notes ? ' — ' + h.notes : ''}`).join('\n') : 'Aucun entretien enregistré'}
 
 Utilise ces informations pour personnaliser tes réponses. Réfère-toi à la doll par son nom. Prends en compte son matériau, son état et ses problèmes actuels pour tes conseils.`;
       }

@@ -9,7 +9,7 @@ export class EcommerceService {
   // === Produits ===
 
   async createProduct(dto: CreateProductDto) {
-    return this.prisma.product.create({
+    return this.prisma.products.create({
       data: {
         ...dto,
         inStock: (dto.stockQty ?? 0) > 0,
@@ -18,16 +18,29 @@ export class EcommerceService {
   }
 
   async getProducts(category?: string) {
-    const where = category ? { category, inStock: true } : { inStock: true };
-    return this.prisma.product.findMany({
+    const where: Record<string, unknown> = { inStock: true, approvalStatus: 'APPROVED' };
+    if (category) where.category = category;
+    return this.prisma.products.findMany({
       where,
-      orderBy: { name: 'asc' },
+      include: {
+        vendor: { select: { businessName: true, logoUrl: true } },
+      },
+      orderBy: [
+        { isSOCProduct: 'desc' },
+        { featured: 'desc' },
+        { sortOrder: 'asc' },
+        { name: 'asc' },
+      ],
     });
   }
 
   async getProduct(productId: string) {
-    const product = await this.prisma.product.findUnique({
+    const product = await this.prisma.products.findUnique({
       where: { id: productId },
+      include: {
+        vendor: { select: { businessName: true, logoUrl: true } },
+        product_images: { orderBy: { sortOrder: 'asc' } },
+      },
     });
     if (!product) throw new NotFoundException('Produit introuvable.');
     return product;
@@ -38,7 +51,7 @@ export class EcommerceService {
   async createOrder(userId: string, dto: CreateOrderDto) {
     // Récupérer les produits et calculer le total
     const productIds = dto.items.map((i) => i.productId);
-    const products = await this.prisma.product.findMany({
+    const products = await this.prisma.products.findMany({
       where: { id: { in: productIds } },
     });
 
@@ -54,16 +67,23 @@ export class EcommerceService {
       }
     }
 
-    // Calculer le total
+    // Calculer le total + commissions
     let total = 0;
     const orderItems = dto.items.map((item) => {
       const product = products.find((p) => p.id === item.productId)!;
       const lineTotal = product.price * item.quantity;
       total += lineTotal;
+
+      // Commission only on vendor products
+      const commissionRate = product.isSOCProduct ? 0 : (product.commissionRate ?? 15);
+      const commission = Math.round(lineTotal * commissionRate) / 100;
+
       return {
         productId: item.productId,
         quantity: item.quantity,
         unitPrice: product.price,
+        vendorId: product.vendorId,
+        commission,
       };
     });
 
@@ -71,7 +91,7 @@ export class EcommerceService {
     const order = await this.prisma.$transaction(async (tx) => {
       // Décrémenter le stock
       for (const item of dto.items) {
-        await tx.product.update({
+        await tx.products.update({
           where: { id: item.productId },
           data: {
             stockQty: { decrement: item.quantity },
@@ -81,28 +101,28 @@ export class EcommerceService {
 
       // Mettre à jour inStock
       for (const item of dto.items) {
-        const updated = await tx.product.findUnique({ where: { id: item.productId } });
+        const updated = await tx.products.findUnique({ where: { id: item.productId } });
         if (updated && updated.stockQty <= 0) {
-          await tx.product.update({
+          await tx.products.update({
             where: { id: item.productId },
             data: { inStock: false },
           });
         }
       }
 
-      return tx.order.create({
+      return tx.orders.create({
         data: {
           userId,
           total,
           shippingAddress: dto.shippingAddress,
           isDiscreet: dto.isDiscreet ?? true,
-          items: {
+          order_items: {
             create: orderItems,
           },
         },
         include: {
-          items: {
-            include: { product: { select: { name: true, imageUrl: true } } },
+          order_items: {
+            include: { products: { select: { name: true, imageUrl: true } } },
           },
         },
       });
@@ -112,11 +132,11 @@ export class EcommerceService {
   }
 
   async getUserOrders(userId: string) {
-    return this.prisma.order.findMany({
+    return this.prisma.orders.findMany({
       where: { userId },
       include: {
-        items: {
-          include: { product: { select: { name: true, imageUrl: true } } },
+        order_items: {
+          include: { products: { select: { name: true, imageUrl: true } } },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -124,11 +144,11 @@ export class EcommerceService {
   }
 
   async getOrder(orderId: string, userId: string) {
-    const order = await this.prisma.order.findUnique({
+    const order = await this.prisma.orders.findUnique({
       where: { id: orderId },
       include: {
-        items: {
-          include: { product: true },
+        order_items: {
+          include: { products: true },
         },
       },
     });

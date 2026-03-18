@@ -9,11 +9,11 @@ export class AppointmentsService {
 
   async create(userId: string, dto: CreateAppointmentDto) {
     // Vérifier que la doll appartient à l'utilisateur
-    const doll = await this.prisma.doll.findUnique({ where: { id: dto.dollId } });
+    const doll = await this.prisma.dolls.findUnique({ where: { id: dto.dollId } });
     if (!doll) throw new NotFoundException('Doll introuvable.');
     if (doll.ownerId !== userId) throw new ForbiddenException();
 
-    return this.prisma.appointment.create({
+    return this.prisma.appointments.create({
       data: {
         userId,
         dollId: dto.dollId,
@@ -26,26 +26,26 @@ export class AppointmentsService {
         storageEndAt: dto.storageEndAt ? new Date(dto.storageEndAt) : null,
       },
       include: {
-        doll: { select: { fullName: true, brand: true } },
+        dolls: { select: { fullName: true, brand: true } },
       },
     });
   }
 
   async findAllByUser(userId: string) {
-    return this.prisma.appointment.findMany({
+    return this.prisma.appointments.findMany({
       where: { userId },
       include: {
-        doll: { select: { fullName: true, brand: true } },
+        dolls: { select: { fullName: true, brand: true } },
       },
       orderBy: { scheduledAt: 'desc' },
     });
   }
 
   async findOne(appointmentId: string, userId: string) {
-    const apt = await this.prisma.appointment.findUnique({
+    const apt = await this.prisma.appointments.findUnique({
       where: { id: appointmentId },
       include: {
-        doll: { select: { fullName: true, brand: true, bodyMaterial: true } },
+        dolls: { select: { fullName: true, brand: true, bodyMaterial: true } },
       },
     });
     if (!apt) throw new NotFoundException('Rendez-vous introuvable.');
@@ -54,7 +54,7 @@ export class AppointmentsService {
   }
 
   async updateStatus(appointmentId: string, userId: string, dto: UpdateAppointmentStatusDto) {
-    const apt = await this.prisma.appointment.findUnique({
+    const apt = await this.prisma.appointments.findUnique({
       where: { id: appointmentId },
     });
     if (!apt) throw new NotFoundException();
@@ -67,20 +67,20 @@ export class AppointmentsService {
       data.completedAt = new Date();
     }
 
-    return this.prisma.appointment.update({
+    return this.prisma.appointments.update({
       where: { id: appointmentId },
       data,
     });
   }
 
   async cancel(appointmentId: string, userId: string) {
-    const apt = await this.prisma.appointment.findUnique({
+    const apt = await this.prisma.appointments.findUnique({
       where: { id: appointmentId },
     });
     if (!apt) throw new NotFoundException();
     if (apt.userId !== userId) throw new ForbiddenException();
 
-    return this.prisma.appointment.update({
+    return this.prisma.appointments.update({
       where: { id: appointmentId },
       data: { status: AppointmentStatus.ANNULE },
     });

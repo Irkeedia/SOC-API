@@ -9,7 +9,7 @@ datasource db {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model advice_votes {
-  id                                   String   @id
+  id                                   String   @id @default(uuid())
   voterId                              String
   receiverId                           String
   score                                Int
@@ -22,11 +22,11 @@ model advice_votes {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model ai_conversations {
-  id          String        @id
+  id          String        @id @default(uuid())
   userId      String
   title       String        @default("Nouvelle conversation")
   createdAt   DateTime      @default(now())
-  updatedAt   DateTime
+  updatedAt   DateTime @updatedAt
   ai_messages ai_messages[]
 
   @@index([userId])
@@ -34,7 +34,7 @@ model ai_conversations {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model ai_messages {
-  id               String           @id
+  id               String           @id @default(uuid())
   conversationId   String
   role             String
   content          String
@@ -46,7 +46,7 @@ model ai_messages {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model appointments {
-  id               String            @id
+  id               String            @id @default(uuid())
   userId           String
   dollId           String
   type             AppointmentType
@@ -59,7 +59,7 @@ model appointments {
   storageEndAt     DateTime?
   completedAt      DateTime?
   createdAt        DateTime          @default(now())
-  updatedAt        DateTime
+  updatedAt        DateTime @updatedAt
   dolls            dolls             @relation(fields: [dollId], references: [id], onDelete: Cascade)
   users            users             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -70,7 +70,7 @@ model appointments {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model doll_issues {
-  id          String        @id
+  id          String        @id @default(uuid())
   dollId      String
   type        IssueType
   bodyZone    BodyZone
@@ -82,7 +82,7 @@ model doll_issues {
   repairNotes String?
   repairCost  Float?
   createdAt   DateTime      @default(now())
-  updatedAt   DateTime
+  updatedAt   DateTime @updatedAt
   resolvedAt  DateTime?
   dolls       dolls         @relation(fields: [dollId], references: [id], onDelete: Cascade)
 
@@ -92,7 +92,7 @@ model doll_issues {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model doll_photos {
-  id        String   @id
+  id        String   @id @default(uuid())
   dollId    String
   url       String
   caption   String?
@@ -105,7 +105,7 @@ model doll_photos {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model dolls {
-  id                  String                @id
+  id                  String                @id @default(uuid())
   ownerId             String
   fullName            String
   brand               String?
@@ -125,7 +125,7 @@ model dolls {
   likeCount           Int                   @default(0)
   shareCount          Int                   @default(0)
   createdAt           DateTime              @default(now())
-  updatedAt           DateTime
+  updatedAt           DateTime @updatedAt
   acquisitionDate     DateTime              @default(now())
   bustSize            Float?
   eyeColor            String?
@@ -151,7 +151,7 @@ model dolls {
 }
 
 model email_verification_tokens {
-  id        String    @id
+  id        String    @id @default(uuid())
   tokenHash String    @unique
   userId    String
   expiresAt DateTime
@@ -164,7 +164,7 @@ model email_verification_tokens {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model maintenance_records {
-  id               String            @id
+  id               String            @id @default(uuid())
   dollId           String
   action           MaintenanceAction
   notes            String?
@@ -180,22 +180,25 @@ model maintenance_records {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model order_items {
-  id        String   @id
-  orderId   String
-  productId String
-  quantity  Int
-  unitPrice Float
-  image     String   @default("")
-  title     String   @default("")
-  orders    orders   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  products  products @relation(fields: [productId], references: [id])
+  id         String   @id @default(uuid())
+  orderId    String
+  productId  String
+  quantity   Int
+  unitPrice  Float
+  image      String   @default("")
+  title      String   @default("")
+  vendorId   String?
+  commission Float?
+  orders     orders   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  products   products @relation(fields: [productId], references: [id])
 
   @@index([orderId])
+  @@index([vendorId])
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model orders {
-  id              String        @id
+  id              String        @id @default(uuid())
   userId          String?
   status          OrderStatus   @default(EN_ATTENTE)
   total           Float
@@ -203,7 +206,7 @@ model orders {
   shippingAddress String?
   isDiscreet      Boolean       @default(true)
   createdAt       DateTime      @default(now())
-  updatedAt       DateTime
+  updatedAt       DateTime @updatedAt
   email           String?
   shippingCity    String?
   shippingCountry String        @default("FR")
@@ -218,7 +221,7 @@ model orders {
 }
 
 model password_reset_tokens {
-  id        String    @id
+  id        String    @id @default(uuid())
   tokenHash String    @unique
   userId    String
   expiresAt DateTime
@@ -231,23 +234,117 @@ model password_reset_tokens {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model products {
-  id          String        @id
-  name        String
-  description String?
-  price       Float
-  currency    String        @default("EUR")
-  imageUrl    String?
-  category    String
-  inStock     Boolean       @default(true)
-  stockQty    Int           @default(0)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime
-  order_items order_items[]
+  id             String            @id @default(uuid())
+  name           String
+  description    String?
+  price          Float
+  currency       String            @default("EUR")
+  imageUrl       String?
+  category       String
+  inStock        Boolean           @default(true)
+  stockQty       Int               @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  // ─── Marketplace fields ───
+  vendorId       String?
+  slug           String?           @unique
+  approvalStatus ProductStatus     @default(APPROVED)
+  rejectionNote  String?
+  commissionRate Float?
+  compareAtPrice Float?
+  shortDesc      String?
+  shippingInfo   String?
+  isSOCProduct   Boolean           @default(true)
+  featured       Boolean           @default(false)
+  sortOrder      Int               @default(0)
+  vendor         vendors?          @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  order_items    order_items[]
+  product_images product_images[]
+  product_reviews product_reviews[]
+
+  @@index([vendorId])
+  @@index([category])
+  @@index([approvalStatus])
+}
+
+model vendors {
+  id              String        @id @default(uuid())
+  userId          String        @unique
+  businessName    String
+  businessEmail   String
+  description     String?
+  logoUrl         String?
+  website         String?
+  phone           String?
+  address         String?
+  city            String?
+  country         String        @default("FR")
+  status          VendorStatus  @default(PENDING)
+  commissionRate  Float         @default(15)
+  totalSales      Float         @default(0)
+  totalPaid       Float         @default(0)
+  approvedAt      DateTime?
+  rejectedNote    String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  user            users         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products        products[]
+  payouts         vendor_payouts[]
+
+  @@index([status])
+}
+
+model product_images {
+  id        String   @id @default(uuid())
+  productId String
+  url       String
+  alt       String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  product   products @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model product_reviews {
+  id        String   @id @default(uuid())
+  productId String
+  userId    String
+  rating    Int
+  title     String?
+  comment   String?
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product   products @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      users    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, userId])
+  @@index([productId])
+}
+
+model vendor_payouts {
+  id           String       @id @default(uuid())
+  vendorId     String
+  amount       Float
+  currency     String       @default("EUR")
+  status       PayoutStatus @default(PENDING)
+  periodStart  DateTime
+  periodEnd    DateTime
+  orderCount   Int          @default(0)
+  commission   Float
+  notes        String?
+  paidAt       DateTime?
+  createdAt    DateTime     @default(now())
+  vendor       vendors      @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@index([status])
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model refresh_tokens {
-  id        String    @id
+  id        String    @id @default(uuid())
   tokenHash String    @unique
   userId    String
   userAgent String?
@@ -262,7 +359,7 @@ model refresh_tokens {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model social_comments {
-  id        String   @id
+  id        String   @id @default(uuid())
   userId    String
   dollId    String
   content   String
@@ -276,7 +373,7 @@ model social_comments {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model social_likes {
-  id        String   @id
+  id        String   @id @default(uuid())
   userId    String
   dollId    String
   createdAt DateTime @default(now())
@@ -288,7 +385,7 @@ model social_likes {
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model users {
-  id                                          String                      @id
+  id                                          String                      @id @default(uuid())
   email                                       String                      @unique
   passwordHash                                String
   displayName                                 String                      @default("")
@@ -302,7 +399,7 @@ model users {
   reputationScore                             Float                       @default(0)
   darkMode                                    Boolean                     @default(false)
   createdAt                                   DateTime                    @default(now())
-  updatedAt                                   DateTime
+  updatedAt                                   DateTime @updatedAt
   address                                     String                      @default("")
   firstName                                   String                      @default("")
   lastName                                    String                      @default("")
@@ -319,13 +416,15 @@ model users {
   orders                                      orders[]
   password_reset_tokens                       password_reset_tokens[]
   refresh_tokens                              refresh_tokens[]
-  social_comments                             social_comments[]
-  social_likes                                social_likes[]
+  social_comments                              social_comments[]
+  social_likes                                  social_likes[]
+  vendor                                        vendors?
+  product_reviews                               product_reviews[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model wardrobe_items {
-  id         String   @id
+  id         String   @id @default(uuid())
   dollId     String
   name       String
   category   String?
@@ -483,6 +582,7 @@ enum ProfileVisibility {
 
 enum Role {
   USER
+  VENDOR
   ADMIN
 }
 
@@ -498,4 +598,25 @@ enum SubscriptionTier {
   FREE
   PREMIUM
   ULTRA
+}
+
+enum ProductStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum VendorStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+  REJECTED
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
 }

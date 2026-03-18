@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Doll, MaintenanceStage, BodyMaterial } from '@prisma/client';
+import { dolls as Doll, MaintenanceStage, BodyMaterial } from '@prisma/client';
 
 /**
  * Service de calcul de dégradation multi-étapes (Axe I).

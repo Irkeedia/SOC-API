@@ -91,6 +91,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Changer son mot de passe (authentifié)' })
   async changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
     await this.authService.changePassword(req.user.userId, dto.currentPassword, dto.newPassword);
+    this.emailService.sendPasswordChangedEmail(req.user.email).catch(() => {});
     return { message: 'Mot de passe modifié avec succès.' };
   }
 
@@ -112,7 +113,10 @@ export class AuthController {
   @Throttle({ auth: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Réinitialiser le mot de passe via token email' })
   async resetPassword(@Body() dto: ResetPasswordDto) {
-    await this.authService.resetPassword(dto.token, dto.password);
+    const result = await this.authService.resetPassword(dto.token, dto.password);
+    if (result.email) {
+      this.emailService.sendPasswordChangedEmail(result.email).catch(() => {});
+    }
     return { message: 'Mot de passe réinitialisé avec succès.' };
   }
 
@@ -124,7 +128,11 @@ export class AuthController {
     if (!token) {
       throw new BadRequestException('Token requis.');
     }
-    await this.authService.verifyEmail(token);
+    const result = await this.authService.verifyEmail(token);
+    // Envoyer l'email de bienvenue
+    if (result.email) {
+      this.emailService.sendWelcomeEmail(result.email, result.displayName).catch(() => {});
+    }
     return { message: 'Email vérifié avec succès.' };
   }
 

@@ -24,7 +24,7 @@ export class AuthService {
 
   async register(dto: RegisterDto) {
     // Vérifier si l'email existe déjà
-    const existing = await this.prisma.user.findUnique({
+    const existing = await this.prisma.users.findUnique({
       where: { email: dto.email },
     });
     if (existing) {
@@ -33,7 +33,7 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
 
-    const user = await this.prisma.user.create({
+    const user = await this.prisma.users.create({
       data: {
         email: dto.email,
         passwordHash,
@@ -57,7 +57,7 @@ export class AuthService {
       );
     }
 
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.users.findUnique({
       where: { email: dto.email },
     });
     if (!user) {
@@ -87,9 +87,9 @@ export class AuthService {
   async refreshAccessToken(refreshToken: string, userAgent?: string) {
     const tokenHash = this.hashToken(refreshToken);
 
-    const stored = await this.prisma.refreshToken.findUnique({
+    const stored = await this.prisma.refresh_tokens.findUnique({
       where: { tokenHash },
-      include: { user: true },
+      include: { users: true },
     });
 
     if (!stored || stored.revokedAt || stored.expiresAt < new Date()) {
@@ -101,7 +101,7 @@ export class AuthService {
           userId: stored.userId,
           details: 'Possible token theft — all refresh tokens revoked',
         });
-        await this.prisma.refreshToken.updateMany({
+        await this.prisma.refresh_tokens.updateMany({
           where: { userId: stored.userId, revokedAt: null },
           data: { revokedAt: new Date() },
         });
@@ -110,19 +110,19 @@ export class AuthService {
     }
 
     // Rotation : révoquer l'ancien
-    await this.prisma.refreshToken.update({
+    await this.prisma.refresh_tokens.update({
       where: { id: stored.id },
       data: { revokedAt: new Date() },
     });
 
-    return this.generateTokenResponse(stored.userId, stored.user.email, userAgent);
+    return this.generateTokenResponse(stored.userId, stored.users.email, userAgent);
   }
 
   /**
    * Révoque tous les refresh tokens d'un utilisateur (logout global).
    */
   async revokeAllRefreshTokens(userId: string) {
-    await this.prisma.refreshToken.updateMany({
+    await this.prisma.refresh_tokens.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
@@ -151,7 +151,7 @@ export class AuthService {
     const tokenHash = this.hashToken(rawRefreshToken);
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
 
-    await this.prisma.refreshToken.create({
+    await this.prisma.refresh_tokens.create({
       data: {
         tokenHash,
         userId,
@@ -161,7 +161,7 @@ export class AuthService {
     });
 
     // Nettoyage des tokens expirés/révoqués (non bloquant)
-    this.prisma.refreshToken.deleteMany({
+    this.prisma.refresh_tokens.deleteMany({
       where: {
         userId,
         OR: [
@@ -196,7 +196,7 @@ export class AuthService {
   // ===========================================
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.users.findUnique({ where: { id: userId } });
     if (!user) throw new UnauthorizedException('Utilisateur introuvable.');
 
     const valid = await bcrypt.compare(currentPassword, user.passwordHash);
@@ -207,7 +207,7 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
-    await this.prisma.user.update({
+    await this.prisma.users.update({
       where: { id: userId },
       data: { passwordHash },
     });
@@ -223,12 +223,12 @@ export class AuthService {
   // ===========================================
 
   async forgotPassword(email: string) {
-    const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    const user = await this.prisma.users.findUnique({ where: { email: email.toLowerCase().trim() } });
 
     // Même en cas d'email inexistant, on retourne le même message (anti-enumération)
     if (user) {
       // Révoquer les anciens tokens non utilisés
-      await this.prisma.passwordResetToken.updateMany({
+      await this.prisma.password_reset_tokens.updateMany({
         where: { userId: user.id, usedAt: null },
         data: { usedAt: new Date() },
       });
@@ -237,7 +237,7 @@ export class AuthService {
       const tokenHash = this.hashToken(rawToken);
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
 
-      await this.prisma.passwordResetToken.create({
+      await this.prisma.password_reset_tokens.create({
         data: { tokenHash, userId: user.id, expiresAt },
       });
 
@@ -255,7 +255,7 @@ export class AuthService {
   async resetPassword(token: string, newPassword: string) {
     const tokenHash = this.hashToken(token);
 
-    const stored = await this.prisma.passwordResetToken.findUnique({
+    const stored = await this.prisma.password_reset_tokens.findUnique({
       where: { tokenHash },
     });
 
@@ -265,12 +265,12 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
 
-    await this.prisma.user.update({
+    const user = await this.prisma.users.update({
       where: { id: stored.userId },
       data: { passwordHash },
     });
 
-    await this.prisma.passwordResetToken.update({
+    await this.prisma.password_reset_tokens.update({
       where: { id: stored.id },
       data: { usedAt: new Date() },
     });
@@ -278,7 +278,7 @@ export class AuthService {
     // Révoquer tous les refresh tokens
     await this.revokeAllRefreshTokens(stored.userId);
 
-    return { message: 'Mot de passe réinitialisé avec succès.' };
+    return { message: 'Mot de passe réinitialisé avec succès.', email: user.email };
   }
 
   // ===========================================
@@ -287,7 +287,7 @@ export class AuthService {
 
   async createEmailVerificationToken(userId: string): Promise<string> {
     // Révoquer les anciens tokens
-    await this.prisma.emailVerificationToken.updateMany({
+    await this.prisma.email_verification_tokens.updateMany({
       where: { userId, usedAt: null },
       data: { usedAt: new Date() },
     });
@@ -296,7 +296,7 @@ export class AuthService {
     const tokenHash = this.hashToken(rawToken);
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
 
-    await this.prisma.emailVerificationToken.create({
+    await this.prisma.email_verification_tokens.create({
       data: { tokenHash, userId, expiresAt },
     });
 
@@ -306,7 +306,7 @@ export class AuthService {
   async verifyEmail(token: string) {
     const tokenHash = this.hashToken(token);
 
-    const stored = await this.prisma.emailVerificationToken.findUnique({
+    const stored = await this.prisma.email_verification_tokens.findUnique({
       where: { tokenHash },
     });
 
@@ -314,17 +314,17 @@ export class AuthService {
       throw new BadRequestException('Lien de vérification invalide ou expiré.');
     }
 
-    await this.prisma.user.update({
+    const user = await this.prisma.users.update({
       where: { id: stored.userId },
       data: { emailVerified: true },
     });
 
-    await this.prisma.emailVerificationToken.update({
+    await this.prisma.email_verification_tokens.update({
       where: { id: stored.id },
       data: { usedAt: new Date() },
     });
 
-    return { message: 'Email vérifié avec succès.' };
+    return { message: 'Email vérifié avec succès.', email: user.email, displayName: user.displayName };
   }
 
   // ===========================================
@@ -332,7 +332,7 @@ export class AuthService {
   // ===========================================
 
   async resendVerificationEmail(userId: string): Promise<string | null> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.users.findUnique({ where: { id: userId } });
     if (!user || user.emailVerified) return null;
     return this.createEmailVerificationToken(userId);
   }

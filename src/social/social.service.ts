@@ -25,7 +25,7 @@ export class SocialService {
 
   async addComment(userId: string, dto: CreateCommentDto) {
     // Vérifier la limite Freemium (5 commentaires/jour pour Free)
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const user = await this.prisma.users.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException();
 
     if (user.subscriptionTier === 'FREE') {
@@ -33,7 +33,7 @@ export class SocialService {
       const now = new Date();
       const lastReset = new Date(user.dailyCommentReset);
       if (now.toDateString() !== lastReset.toDateString()) {
-        await this.prisma.user.update({
+        await this.prisma.users.update({
           where: { id: userId },
           data: { dailyCommentCount: 0, dailyCommentReset: now },
         });
@@ -48,28 +48,28 @@ export class SocialService {
     }
 
     // Vérifier que la doll est publique
-    const doll = await this.prisma.doll.findUnique({
+    const doll = await this.prisma.dolls.findUnique({
       where: { id: dto.dollId },
-      include: { owner: { select: { profileVisibility: true } } },
+      include: { users: { select: { profileVisibility: true } } },
     });
     if (!doll) throw new NotFoundException('Doll introuvable.');
-    if (doll.owner.profileVisibility === 'PRIVATE' && doll.ownerId !== userId) {
+    if (doll.users.profileVisibility === 'PRIVATE' && doll.ownerId !== userId) {
       throw new ForbiddenException('Cette doll n\'est pas visible publiquement.');
     }
 
     // Créer le commentaire et incrémenter le compteur
     const [comment] = await this.prisma.$transaction([
-      this.prisma.socialComment.create({
+      this.prisma.social_comments.create({
         data: {
           userId,
           dollId: dto.dollId,
           content: sanitizeHtml(dto.content),
         },
         include: {
-          user: { select: { displayName: true, avatarUrl: true, reputationScore: true } },
+          users: { select: { displayName: true, avatarUrl: true, reputationScore: true } },
         },
       }),
-      this.prisma.user.update({
+      this.prisma.users.update({
         where: { id: userId },
         data: { dailyCommentCount: { increment: 1 } },
       }),
@@ -79,10 +79,10 @@ export class SocialService {
   }
 
   async getComments(dollId: string, page = 1, limit = 20) {
-    return this.prisma.socialComment.findMany({
+    return this.prisma.social_comments.findMany({
       where: { dollId },
       include: {
-        user: { select: { displayName: true, avatarUrl: true, reputationScore: true } },
+        users: { select: { displayName: true, avatarUrl: true, reputationScore: true } },
       },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * limit,
@@ -93,14 +93,14 @@ export class SocialService {
   // === Likes ===
 
   async toggleLike(userId: string, dollId: string) {
-    const existing = await this.prisma.socialLike.findUnique({
+    const existing = await this.prisma.social_likes.findUnique({
       where: { userId_dollId: { userId, dollId } },
     });
 
     if (existing) {
       await this.prisma.$transaction([
-        this.prisma.socialLike.delete({ where: { id: existing.id } }),
-        this.prisma.doll.update({
+        this.prisma.social_likes.delete({ where: { id: existing.id } }),
+        this.prisma.dolls.update({
           where: { id: dollId },
           data: { likeCount: { decrement: 1 } },
         }),
@@ -108,8 +108,8 @@ export class SocialService {
       return { liked: false };
     } else {
       await this.prisma.$transaction([
-        this.prisma.socialLike.create({ data: { userId, dollId } }),
-        this.prisma.doll.update({
+        this.prisma.social_likes.create({ data: { userId, dollId } }),
+        this.prisma.dolls.update({
           where: { id: dollId },
           data: { likeCount: { increment: 1 } },
         }),
@@ -125,13 +125,13 @@ export class SocialService {
       throw new BadRequestException('Impossible de voter pour soi-même.');
     }
 
-    const receiver = await this.prisma.user.findUnique({
+    const receiver = await this.prisma.users.findUnique({
       where: { id: dto.receiverId },
     });
     if (!receiver) throw new NotFoundException('Utilisateur introuvable.');
 
     // Upsert le vote
-    await this.prisma.adviceVote.upsert({
+    await this.prisma.advice_votes.upsert({
       where: {
         voterId_receiverId: { voterId, receiverId: dto.receiverId },
       },
@@ -146,14 +146,14 @@ export class SocialService {
     });
 
     // Recalculer la réputation
-    const aggregation = await this.prisma.adviceVote.aggregate({
+    const aggregation = await this.prisma.advice_votes.aggregate({
       where: { receiverId: dto.receiverId },
       _avg: { score: true },
       _sum: { score: true },
       _count: { score: true },
     });
 
-    await this.prisma.user.update({
+    await this.prisma.users.update({
       where: { id: dto.receiverId },
       data: {
         adviceScore: aggregation._sum.score || 0,
