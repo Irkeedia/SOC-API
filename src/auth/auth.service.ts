@@ -12,6 +12,18 @@ const loginAttempts = new Map<string, { count: number; lockedUntil: number }>();
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 const REFRESH_TOKEN_EXPIRY_DAYS = 30;
+const LOGIN_MAP_MAX_SIZE = 10000;
+
+// Nettoyage périodique de la Map loginAttempts (évite fuite mémoire)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of loginAttempts) {
+    if (now > val.lockedUntil && val.count === 0) loginAttempts.delete(key);
+    else if (now > val.lockedUntil + LOCKOUT_DURATION_MS) loginAttempts.delete(key);
+  }
+  // Hard cap : si la Map dépasse la limite, tout vider
+  if (loginAttempts.size > LOGIN_MAP_MAX_SIZE) loginAttempts.clear();
+}, 30 * 60 * 1000); // toutes les 30 min
 
 @Injectable()
 export class AuthService {

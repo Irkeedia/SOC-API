@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsBoolean, IsDateString, Min, Max, MaxLength, IsUrl, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, IsBoolean, IsDateString, Min, Max, MaxLength, IsUrl, IsArray, ArrayMaxSize } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BodyMaterial, HeadMaterial, DollGender, DollUsage } from '@prisma/client';
 
@@ -120,8 +120,10 @@ export class CreateDollDto {
   @IsBoolean()
   initialMaintenanceDone?: boolean;
 
-  @ApiPropertyOptional({ description: 'Liste des actions d\'entretien déjà effectuées', example: ['LAVAGE', 'POUDRAGE'] })
+  @ApiPropertyOptional({ description: 'Liste des actions d\'entretien déjà effectuées (max 15)', example: ['LAVAGE', 'POUDRAGE'] })
   @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(15)
   @IsString({ each: true })
   initialActions?: string[];
 }

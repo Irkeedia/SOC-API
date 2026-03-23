@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 export enum SecurityEvent {
@@ -24,10 +24,11 @@ export interface SecurityLogEntry {
 }
 
 @Injectable()
-export class SecurityLoggerService {
+export class SecurityLoggerService implements OnModuleDestroy {
   private readonly logger = new Logger('SECURITY');
   private readonly alertWebhookUrl: string | undefined;
   private readonly sentryDsn: string | undefined;
+  private cleanupTimer: ReturnType<typeof setInterval>;
 
   // Compteurs en mémoire pour détecter les patterns d'attaque
   private readonly eventCounts = new Map<string, { count: number; firstAt: number }>();
@@ -39,7 +40,11 @@ export class SecurityLoggerService {
     this.sentryDsn = config.get<string>('SENTRY_DSN');
 
     // Nettoyage périodique des compteurs
-    setInterval(() => this.cleanupCounters(), 10 * 60 * 1000);
+    this.cleanupTimer = setInterval(() => this.cleanupCounters(), 10 * 60 * 1000);
+  }
+
+  onModuleDestroy() {
+    clearInterval(this.cleanupTimer);
   }
 
   /**

@@ -138,6 +138,15 @@ export class SnapshotService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // Guard : ne pas régénérer si déjà fait aujourd'hui
+    const existing = await this.prisma.analytics_brand_reports.count({
+      where: { snapshotDate: today },
+    });
+    if (existing > 0) {
+      this.logger.log(`Brand reports déjà générés aujourd'hui (${existing} rapports), skip.`);
+      return existing;
+    }
+
     // Récupérer toutes les marques distinctes
     const brands = await this.prisma.dolls.groupBy({
       by: ['brand'],

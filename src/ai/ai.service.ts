@@ -165,6 +165,7 @@ Tu connais toutes les dolls de l'utilisateur. Tu peux les comparer, donner des c
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(25000),
     });
 
     if (!response.ok) {
