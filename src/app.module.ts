@@ -14,6 +14,8 @@ import { EcommerceModule } from './ecommerce/ecommerce.module';
 import { SocialModule } from './social/social.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { VendorsModule } from './vendors/vendors.module';
+import { StatisticsModule } from './statistics/statistics.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { HealthController } from './health.controller';
 import { DailyBudgetGuard } from './common/guards/daily-budget.guard';
 import { CommonModule } from './common/common.module';
@@ -54,6 +56,8 @@ import { CommonModule } from './common/common.module';
     SocialModule,
     SubscriptionModule,
     VendorsModule,
+    StatisticsModule,
+    AnalyticsModule,
   ],
   controllers: [HealthController],
   providers: [

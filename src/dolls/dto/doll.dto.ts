@@ -1,6 +1,6 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsBoolean, IsDateString, Min, Max, MaxLength, IsUrl } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, IsBoolean, IsDateString, Min, Max, MaxLength, IsUrl, IsArray } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { BodyMaterial, HeadMaterial, DollGender } from '@prisma/client';
+import { BodyMaterial, HeadMaterial, DollGender, DollUsage } from '@prisma/client';
 
 export class CreateDollDto {
   @ApiProperty({ example: 'Sophia Laurent' })
@@ -100,6 +100,19 @@ export class CreateDollDto {
   @IsString()
   @MaxLength(1000)
   features?: string;
+
+  // Utilisation
+  @ApiPropertyOptional({ enum: DollUsage, isArray: true, example: ['COMPAGNIE', 'PHOTOS'] })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(DollUsage, { each: true })
+  usage?: DollUsage[];
+
+  @ApiPropertyOptional({ example: 'Détails si usage "Autre"' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  usageDetails?: string;
 
   // Entretien initial
   @ApiPropertyOptional({ description: 'La doll a déjà été entretenue (met le compteur à 0)' })
@@ -203,6 +216,18 @@ export class UpdateDollDto {
   @IsOptional()
   @IsString()
   features?: string;
+
+  @ApiPropertyOptional({ enum: DollUsage, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(DollUsage, { each: true })
+  usage?: DollUsage[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  usageDetails?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

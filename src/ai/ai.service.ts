@@ -60,7 +60,7 @@ export class AiService {
       throw new BadRequestException('Clé API Gemini non configurée. Ajoutez GEMINI_API_KEY dans .env');
     }
 
-    // Construire le contexte doll si dollId fourni
+    // Construire le contexte doll si dollId fourni, sinon mode général (toutes les dolls)
     let dollContext = '';
     if (dto.dollId) {
       const doll: any = await this.prisma.dolls.findFirst({
@@ -91,6 +91,7 @@ Tour de taille : ${doll.waistSize ? doll.waistSize + ' cm' : 'Non renseigné'}
 Tour de hanches : ${doll.hipSize ? doll.hipSize + ' cm' : 'Non renseigné'}
 Pointure : ${doll.footSize || 'Non renseignée'}
 Caractéristiques : ${doll.features || 'Aucune'}
+Utilisation : ${doll.usage && doll.usage.length > 0 ? doll.usage.join(', ') : 'Non renseignée'}${doll.usageDetails ? ' — ' + doll.usageDetails : ''}
 Date d'acquisition : ${doll.acquisitionDate ? new Date(doll.acquisitionDate).toLocaleDateString('fr-FR') : 'Non renseignée'}
 État de la peau : ${doll.skinCondition || 'Non évalué'}
 État des articulations : ${doll.jointCondition || 'Non évalué'}
@@ -109,6 +110,32 @@ ${resolvedIssues.length > 0 ? resolvedIssues.slice(0, 5).map((i: any) => `- [${i
 ${doll.maintenance_records.length > 0 ? doll.maintenance_records.map((h: any) => `- ${new Date(h.performedAt).toLocaleDateString('fr-FR')} : ${h.action}${h.notes ? ' — ' + h.notes : ''}`).join('\n') : 'Aucun entretien enregistré'}
 
 Utilise ces informations pour personnaliser tes réponses. Réfère-toi à la doll par son nom. Prends en compte son matériau, son état et ses problèmes actuels pour tes conseils.`;
+      }
+    } else {
+      // Mode général : charger toutes les dolls de l'utilisateur
+      const allDolls: any[] = await (this.prisma as any).dolls.findMany({
+        where: { ownerId: userId },
+        include: {
+          doll_issues: { where: { status: { notIn: ['REPARE', 'IRRECUPERABLE'] } }, take: 5 },
+          maintenance_records: { orderBy: { performedAt: 'desc' }, take: 3 },
+        },
+      });
+      if (allDolls.length > 0) {
+        const dollSummaries = allDolls.map((d: any) => {
+          const issueCount = d.doll_issues?.length ?? 0;
+          const lastMaint = d.maintenance_records?.[0];
+          return `- ${d.fullName} (${d.gender}, ${d.bodyMaterial}${d.headMaterial !== d.bodyMaterial ? '/' + d.headMaterial : ''})
+  Marque: ${d.brand || '?'} | Taille: ${d.sizeCm ? d.sizeCm + 'cm' : '?'} | Poids: ${d.weightKg ? d.weightKg + 'kg' : '?'}
+  Utilisation: ${d.usage && d.usage.length > 0 ? d.usage.join(', ') : 'Non renseignée'}${d.usageDetails ? ' — ' + d.usageDetails : ''}
+  Dégradation: ${d.degradationLevel ?? 0}% | Peau: ${d.skinCondition} | Articulations: ${d.jointCondition} | Fissures: ${d.fissureCount ?? 0}
+  Problèmes actifs: ${issueCount}${issueCount > 0 ? ' (' + d.doll_issues.map((i: any) => i.title).join(', ') + ')' : ''}
+  Dernier entretien: ${lastMaint ? new Date(lastMaint.performedAt).toLocaleDateString('fr-FR') + ' — ' + lastMaint.action : 'Aucun'}
+  Acquisition: ${d.acquisitionDate ? new Date(d.acquisitionDate).toLocaleDateString('fr-FR') : '?'}`;
+        }).join('\n\n');
+        dollContext = `\n\n=== MODE GÉNÉRAL — TOUTES LES DOLLS DE L'UTILISATEUR (${allDolls.length}) ===
+${dollSummaries}
+
+Tu connais toutes les dolls de l'utilisateur. Tu peux les comparer, donner des conseils globaux, faire un audit de leur état, et répondre à des questions sur n'importe laquelle. Appelle chaque doll par son prénom.`;
       }
     }
 
@@ -155,7 +182,7 @@ Utilise ces informations pour personnaliser tes réponses. Réfère-toi à la do
       // Créer une nouvelle conversation
       const firstMsg = dto.messages[0]?.content || 'Nouvelle conversation';
       const title = firstMsg.substring(0, 80);
-      const conv = await db.aiConversation.create({
+      const conv = await db.ai_conversations.create({
         data: { userId, title },
       });
       conversationId = conv.id;
@@ -164,7 +191,7 @@ Utilise ces informations pour personnaliser tes réponses. Réfère-toi à la do
     // Sauvegarder le dernier message user + réponse
     const lastUserMsg = dto.messages[dto.messages.length - 1];
     if (lastUserMsg) {
-      await db.aiMessage.create({
+      await db.ai_messages.create({
         data: {
           conversationId,
           role: 'user',
@@ -172,7 +199,7 @@ Utilise ces informations pour personnaliser tes réponses. Réfère-toi à la do
         },
       });
     }
-    await db.aiMessage.create({
+    await db.ai_messages.create({
       data: {
         conversationId,
         role: 'assistant',
@@ -189,7 +216,7 @@ Utilise ces informations pour personnaliser tes réponses. Réfère-toi à la do
 
   async getConversations(userId: string) {
     const db = this.prisma as any;
-    return db.aiConversation.findMany({
+    return db.ai_conversations.findMany({
       where: { userId },
       orderBy: { updatedAt: 'desc' },
       take: 50,
@@ -198,17 +225,17 @@ Utilise ces informations pour personnaliser tes réponses. Réfère-toi à la do
         title: true,
         createdAt: true,
         updatedAt: true,
-        _count: { select: { messages: true } },
+        _count: { select: { ai_messages: true } },
       },
     });
   }
 
   async getConversation(userId: string, conversationId: string) {
     const db = this.prisma as any;
-    const conv = await db.aiConversation.findUnique({
+    const conv = await db.ai_conversations.findUnique({
       where: { id: conversationId },
       include: {
-        messages: { orderBy: { createdAt: 'asc' } },
+        ai_messages: { orderBy: { createdAt: 'asc' } },
       },
     });
     if (!conv) throw new BadRequestException('Conversation introuvable');
@@ -218,9 +245,9 @@ Utilise ces informations pour personnaliser tes réponses. Réfère-toi à la do
 
   async deleteConversation(userId: string, conversationId: string) {
     const db = this.prisma as any;
-    const conv = await db.aiConversation.findUnique({ where: { id: conversationId } });
+    const conv = await db.ai_conversations.findUnique({ where: { id: conversationId } });
     if (!conv) throw new BadRequestException('Conversation introuvable');
     if (conv.userId !== userId) throw new BadRequestException('Accès non autorisé');
-    return db.aiConversation.delete({ where: { id: conversationId } });
+    return db.ai_conversations.delete({ where: { id: conversationId } });
   }
 }

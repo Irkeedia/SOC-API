@@ -1,6 +1,6 @@
 # 🧬 SOC API — Synthetic Object Care
 
-> Backend API pour l'application mobile SOC — Gestion, entretien et communauté autour des dolls en silicone/TPE.
+> Backend API pour l'application mobile SOC & la marketplace — Gestion des dolls, entretien, communauté, marketplace multi-vendeurs.
 
 ![NestJS](https://img.shields.io/badge/NestJS-10.4-E0234E?logo=nestjs)
 ![Prisma](https://img.shields.io/badge/Prisma-5.14-2D3748?logo=prisma)
@@ -17,12 +17,14 @@
 - [Installation](#-installation)
 - [Variables d'environnement](#-variables-denvironnement)
 - [Scripts](#-scripts)
-- [Endpoints API](#-endpoints-api-45-routes)
+- [Endpoints API](#-endpoints-api-65-routes)
+- [Marketplace (Module Vendors)](#-marketplace-module-vendors)
 - [Base de données](#-base-de-données)
 - [Sécurité](#-sécurité)
 - [Abonnements (Freemium)](#-abonnements-freemium)
 - [Fonctionnalités clés](#-fonctionnalités-clés)
 - [Déploiement Railway](#-déploiement-railway)
+- [Historique des versions](#-historique-des-versions)
 
 ---
 
@@ -34,20 +36,24 @@
 │  ├── Helmet (sécurité headers)       │
 │  ├── ThrottlerGuard (rate limiting)  │
 │  ├── JWT Auth (Passport)             │
-│  └── 14 modules métier               │
-└───────────────┬──────────────────────┘
+│  └── 16 modules métier               │
+└────────────────┬─────────────────────┘
                 │ Prisma ORM (SSL)
                 ▼
 ┌──────────────────────────┐
 │  Neon PostgreSQL         │
-│  17 tables · 17 enums    │
+│  22 tables · 21 enums    │
 └──────────────────────────┘
                 ▲
                 │ HTTPS
 ┌───────────────┴──────────────────┐
 │  App Flutter (iOS / Android)     │
-│  + Site Astro (vitrine)          │
-└──────────────────────────────────┘
+│  + Site Astro (vitrine/marketplace)│
+└──────────────────────────────────┐
+                                    │
+                                    ▼
+                        Cloudflare R2 (CDN images)
+                        cdn.silenceofceleste.com
 ```
 
 ---
@@ -63,6 +69,7 @@
 | Validation | class-validator + class-transformer |
 | Documentation | Swagger / OpenAPI |
 | Sécurité | Helmet + @nestjs/throttler (rate limiting) |
+| Stockage images | Cloudflare R2 (S3-compatible) — CDN `cdn.silenceofceleste.com` |
 | IA | Google Gemini 2.0 Flash |
 | Abonnements | 3 tiers (FREE / PREMIUM / ULTRA) |
 | Emails | Resend (DKIM + SPF + DMARC) |
@@ -112,6 +119,11 @@ Swagger disponible sur `http://localhost:3000/api/docs`
 | `PUBLIC_SITE_URL` | URL du site (liens dans les emails) | `https://www.silenceofceleste.com` |
 | `PORT` | Port du serveur | `3000` |
 | `NODE_ENV` | Environnement | `development` / `production` |
+| `R2_ACCOUNT_ID` | ID du compte Cloudflare | `8e109...` |
+| `R2_ACCESS_KEY_ID` | Clé d'accès R2 (API token) | `14793...` |
+| `R2_SECRET_ACCESS_KEY` | Clé secrète R2 | `53228...` |
+| `R2_BUCKET_NAME` | Nom du bucket R2 | `silence-of-celeste` |
+| `R2_PUBLIC_URL` | URL publique du CDN R2 | `https://cdn.silenceofceleste.com` |
 
 ---
 
@@ -131,7 +143,7 @@ Swagger disponible sur `http://localhost:3000/api/docs`
 
 ---
 
-## 📡 Endpoints API (50+ routes)
+## 📡 Endpoints API (72+ routes)
 
 Préfixe global : `/api/v1`
 
@@ -168,6 +180,10 @@ Préfixe global : `/api/v1`
 | `GET` | `/dolls/:id` | 🔒 | Détails + dégradation temps réel |
 | `PATCH` | `/dolls/:id` | 🔒 | Modifier une Doll |
 | `DELETE` | `/dolls/:id` | 🔒 | Supprimer une Doll |
+| `POST` | `/dolls/:id/photos` | 🔒 | Uploader une photo (R2, 10MB max, rate limit 5/min) |
+| `DELETE` | `/dolls/photos/:photoId` | 🔒 | Supprimer une photo |
+| `PATCH` | `/dolls/photos/:photoId` | 🔒 | Modifier légende / ordre de tri |
+| `PATCH` | `/dolls/:id/profile-photo` | 🔒 | Définir la photo de profil |
 | `POST` | `/dolls/:id/wardrobe` | 🔒 | Ajouter un article garde-robe |
 | `PATCH` | `/dolls/wardrobe/:itemId` | 🔒 | Modifier un article |
 | `DELETE` | `/dolls/wardrobe/:itemId` | 🔒 | Retirer un article |
@@ -214,12 +230,32 @@ Préfixe global : `/api/v1`
 
 | Méthode | Route | Auth | Description |
 |---------|-------|------|-------------|
-| `GET` | `/shop/products` | ❌ | Catalogue (filtre par catégorie) |
-| `GET` | `/shop/products/:id` | ❌ | Détails produit |
+| `GET` | `/shop/products` | ❌ | Catalogue (filtre par catégorie, marketplace-aware) |
+| `GET` | `/shop/products/:id` | ❌ | Détails produit (+ images, vendor, reviews) |
 | `POST` | `/shop/products` | 🔒 | Ajouter un produit (admin) |
 | `POST` | `/shop/orders` | 🔒 | Passer commande (livraison discrète) |
 | `GET` | `/shop/orders` | 🔒 | Mes commandes |
 | `GET` | `/shop/orders/:id` | 🔒 | Détails commande |
+
+### 🆕 Marketplace — `/marketplace`
+
+| Méthode | Route | Auth | Description |
+|---------|-------|------|-------------|
+| `GET` | `/marketplace/products` | ❌ | Tous les produits marketplace (SOC en premier) |
+| `GET` | `/marketplace/products/:slug` | ❌ | Détail produit par slug |
+| `POST` | `/marketplace/vendors/apply` | 🔒 | Candidater comme vendeur |
+| `GET` | `/marketplace/vendors/me` | 🔒 | Mon profil vendeur |
+| `PUT` | `/marketplace/vendors/me` | 🔒 | Modifier profil vendeur |
+| `GET` | `/marketplace/vendors/dashboard` | 🔒 | Dashboard vendeur (stats, revenus, commissions) |
+| `GET` | `/marketplace/vendors/sales` | 🔒 | Historique des ventes |
+| `GET` | `/marketplace/vendors/products` | 🔒 | Mes produits |
+| `POST` | `/marketplace/vendors/products` | 🔒 | Soumettre un produit |
+| `PUT` | `/marketplace/vendors/products/:id` | 🔒 | Modifier un produit |
+| `DELETE` | `/marketplace/vendors/products/:id` | 🔒 | Supprimer un produit |
+| `GET` | `/marketplace/admin/vendors` | 🔒 Admin | Liste vendeurs (filtre par statut) |
+| `PUT` | `/marketplace/admin/vendors/:id/review` | 🔒 Admin | Approuver/refuser/suspendre vendeur |
+| `GET` | `/marketplace/admin/products/pending` | 🔒 Admin | Produits en attente de validation |
+| `PUT` | `/marketplace/admin/products/:id/review` | 🔒 Admin | Approuver/refuser produit |
 
 ### Social — `/social`
 
@@ -239,21 +275,70 @@ Préfixe global : `/api/v1`
 
 ---
 
-## 🗄 Base de données
+## 🏪 Marketplace (Module Vendors)
 
-### 18 Models
+### Architecture
+
+Le module `VendorsModule` gère toute la logique marketplace :
+- **VendorsController** — 15 endpoints préfixés `/marketplace`
+- **VendorsService** — 14 méthodes métier (~280 lignes)
+- **6 DTOs** — validation des entrées vendeur/admin
+
+### Flux vendeur
+
+```
+1. Candidature : POST /marketplace/vendors/apply
+   → Crée profil vendeur (status: PENDING) → upgrade rôle USER → VENDOR
+
+2. Validation admin : PUT /marketplace/admin/vendors/:id/review
+   → APPROVED (+ commission rate) | REJECTED (+ note) | SUSPENDED
+
+3. Soumission produit : POST /marketplace/vendors/products
+   → Auto-génération slug, approvalStatus: PENDING, commission héritée
+
+4. Modération produit : PUT /marketplace/admin/products/:id/review
+   → APPROVED | REJECTED (+ rejectionNote)
+
+5. Vente : vendeur voit ses ventes via GET /marketplace/vendors/sales
+   → Revenue brut - commission (15% défaut) = net earnings
+```
+
+### Système de commissions
+
+| Paramètre | Valeur |
+|-----------|--------|
+| Commission par défaut | 15% |
+| Configurable par vendeur | Oui (0-100%, via admin review) |
+| Tracking | `totalSales`, `totalPaid` sur le profil vendeur |
+| Payouts | Modèle `vendor_payouts` avec period tracking |
+
+### Statuts
+
+| Entité | Statuts |
+|--------|---------|
+| Vendeur (`VendorStatus`) | `PENDING` → `APPROVED` / `REJECTED` / `SUSPENDED` |
+| Produit (`ProductStatus`) | `DRAFT` → `PENDING` → `APPROVED` / `REJECTED` |
+| Paiement (`PayoutStatus`) | `PENDING` → `PROCESSING` → `COMPLETED` / `FAILED` |
+
+---
+
+### 22 Models
 
 | Model | Description |
 |-------|-------------|
-| `User` | Utilisateur (profil, abonnement, quotas IA, réputation) |
+| `User` | Utilisateur (profil, abonnement, quotas IA, réputation, rôle USER/VENDOR/ADMIN) |
 | `Doll` | Entité critique (identité, apparence, specs, état, social) |
 | `DollPhoto` | Photos d'une Doll |
 | `WardrobeItem` | Articles de garde-robe virtuelle |
 | `MaintenanceRecord` | Historique des actions d'entretien |
 | `Appointment` | Rendez-vous (nettoyage, gardiennage, réparation) |
-| `Product` | Catalogue e-commerce |
+| `Product` | Catalogue e-commerce (marketplace-aware, vendorId, approvalStatus) |
+| `ProductImage` | 🆕 Images produit multiples (triées par sortOrder) |
+| `ProductReview` | 🆕 Avis produit (note 1-5, vérifié, unique par user+produit) |
 | `Order` | Commandes (intégration Stripe) |
 | `OrderItem` | Lignes de commande |
+| `Vendor` | 🆕 Profil vendeur (boutique, commission, statut, stats) |
+| `VendorPayout` | 🆕 Suivi des paiements vendeur (période, montant, commission) |
 | `SocialComment` | Commentaires sur les dolls |
 | `SocialLike` | Likes (unique par user + doll) |
 | `AdviceVote` | Votes de réputation (1-5) |
@@ -264,9 +349,9 @@ Préfixe global : `/api/v1`
 | `PasswordResetToken` | Tokens de réinitialisation mot de passe (SHA-256) |
 | `EmailVerificationToken` | Tokens de vérification email (SHA-256) |
 
-### 17 Enums
+### 21 Enums
 
-`SubscriptionTier` · `ProfileVisibility` · `DollGender` · `BodyMaterial` · `HeadMaterial` · `SkinCondition` · `JointCondition` · `MaintenanceStage` · `MaintenanceAction` · `AppointmentType` · `AppointmentStatus` · `OrderStatus` · `IssueType` · `BodyZone` · `IssueSeverity` · `IssueStatus` · `Role`
+`SubscriptionTier` · `ProfileVisibility` · `DollGender` · `BodyMaterial` · `HeadMaterial` · `SkinCondition` · `JointCondition` · `MaintenanceStage` · `MaintenanceAction` · `AppointmentType` · `AppointmentStatus` · `OrderStatus` · `IssueType` · `BodyZone` · `IssueSeverity` · `IssueStatus` · `Role` · `DollUsage` · 🆕 `ProductStatus` · 🆕 `VendorStatus` · 🆕 `PayoutStatus`
 
 ---
 
@@ -275,6 +360,7 @@ Préfixe global : `/api/v1`
 | Protection | Détail |
 |------------|--------|
 | **Rate Limiting** | 100 requêtes / 60 secondes par IP, limites spécifiques par endpoint |
+| **Upload Sécurisé** | 10 photos/doll max, 200 photos/user max, 5 uploads/min, 10MB/fichier, validation MIME (JPG/PNG/WebP/GIF/HEIC) |
 | **Helmet** | Headers de sécurité (XSS, clickjacking, MIME sniffing…) |
 | **Request Timeout** | 30 secondes max par requête |
 | **JWT Auth** | Access token (1h) + Refresh token (30 jours) avec rotation |
@@ -304,6 +390,21 @@ Préfixe global : `/api/v1`
 
 ## ⚙️ Fonctionnalités clés
 
+### 📷 Stockage images Cloudflare R2
+- Upload photos via `UploadService` (client S3 compatible R2)
+- Bucket : `silence-of-celeste`, CDN : `cdn.silenceofceleste.com`
+- Validation MIME (JPG, PNG, WebP, GIF, HEIC/HEIF) + taille max 10MB
+- Limites : 10 photos/doll, 200 photos/utilisateur, 5 uploads/min
+- Photo de profil sélectionnable par doll (`profilePhotoId`)
+- UUID unique pour chaque fichier uploadé
+
+### 🆕 Marketplace multi-vendeurs
+- Candidature vendeur → validation admin → soumission produits → modération → vente
+- Commission configurable (15% par défaut) par vendeur
+- Dashboard vendeur : stats, revenus, commandes, produits
+- Admin : validation vendeurs, modération produits, suivi commissions
+- Tri catalogue : produits SOC en premier → featured → sortOrder
+
 ### 🔬 Dégradation temps réel
 Calcul automatique basé sur :
 - Temps depuis le dernier lavage
@@ -324,7 +425,7 @@ Connexion automatique app → site web via token JWT (5 min de validité).
 26 zones corporelles pour des signalements de problèmes ultra-précis.
 
 ### 📦 E-commerce discret
-Intégration Stripe avec livraison discrète par défaut.
+Intégration Stripe avec livraison discrète par défaut. Marketplace-aware avec commissions vendeurs.
 
 ---
 
@@ -359,7 +460,9 @@ Le projet est configuré pour un déploiement automatique sur Railway.
 
 | Version | Description |
 | --- | --- |
-| v3 `latest` | feat: gestion complète email/mot de passe — email verification à l'inscription, forgot/reset/change password, emails transactionnels Resend (DKIM+SPF+DMARC), refresh tokens avec rotation + détection theft, anti brute-force, security logger, budget quotidien, observabilité |
+| v5 `latest` | feat: stockage images Cloudflare R2 — UploadService S3 (R2), 4 endpoints photos (upload/delete/update/profile-photo), CDN `cdn.silenceofceleste.com`, sécurité upload (10 photos/doll, 200/user, rate limit 5/min, 10MB, validation MIME), champ `profilePhotoId` sur dolls, enum `DollUsage` (7 valeurs), champs `usage`/`usageDetails` sur dolls |
+| v4 | feat: marketplace multi-vendeurs — module VendorsModule (controller + service + DTOs), 15 endpoints `/marketplace/*`, modèles vendors/product_images/product_reviews/vendor_payouts, enums ProductStatus/VendorStatus/PayoutStatus, commission system (15% défaut), ecommerce service marketplace-aware, rôle VENDOR dans enum Role · intégration site Astro : espace client Shop-style (4 pages), espace vendeur Shopify-style (12 pages), auth change-password endpoint utilisé par le site |
+| v3 | feat: gestion complète email/mot de passe — email verification à l'inscription, forgot/reset/change password, emails transactionnels Resend (DKIM+SPF+DMARC), refresh tokens avec rotation + détection theft, anti brute-force, security logger, budget quotidien, observabilité |
 | v2 | feat: sécurité renforcée (Helmet, ThrottlerGuard, rate limiting), support tier ULTRA, dynamic upsell, pré-vérification quota dolls, alignement JWT_SECRET avec site Astro |
 | v1 | Initial — auth JWT, modules métier (dolls, maintenance, IA, shop, social), déploiement Railway |
 

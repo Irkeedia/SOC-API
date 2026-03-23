@@ -1,8 +1,10 @@
 import {
   Controller, Get, Post, Patch, Delete,
-  Body, Param, Query, UseGuards,
+  Body, Param, Query, UseGuards, UseInterceptors, UploadedFile,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiConsumes } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { DollsService } from './dolls.service';
@@ -73,6 +75,59 @@ export class DollsController {
   @ApiOperation({ summary: 'Supprimer une Doll' })
   remove(@Param('id') id: string, @CurrentUser('userId') userId: string) {
     return this.dollsService.remove(id, userId);
+  }
+
+  // === Photos ===
+
+  @Post(':id/photos')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  @ApiOperation({ summary: 'Uploader une photo pour une doll' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  uploadPhoto(
+    @Param('id') dollId: string,
+    @CurrentUser('userId') userId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body('caption') caption?: string,
+  ) {
+    return this.dollsService.uploadPhoto(dollId, userId, file, caption);
+  }
+
+  @Delete('photos/:photoId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Supprimer une photo' })
+  removePhoto(
+    @Param('photoId') photoId: string,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.dollsService.removePhoto(photoId, userId);
+  }
+
+  @Patch('photos/:photoId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Modifier la légende ou l\'ordre d\'une photo' })
+  updatePhoto(
+    @Param('photoId') photoId: string,
+    @CurrentUser('userId') userId: string,
+    @Body() body: { caption?: string; sortOrder?: number },
+  ) {
+    return this.dollsService.updatePhoto(photoId, userId, body);
+  }
+
+  @Patch(':id/profile-photo')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Définir la photo de profil d\'une doll' })
+  setProfilePhoto(
+    @Param('id') dollId: string,
+    @CurrentUser('userId') userId: string,
+    @Body('photoId') photoId: string,
+  ) {
+    return this.dollsService.setProfilePhoto(dollId, userId, photoId);
   }
 
   // === Garde-robe ===

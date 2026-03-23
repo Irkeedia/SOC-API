@@ -138,6 +138,9 @@ model dolls {
   hipSize             Float?
   skinTone            String?
   waistSize           Float?
+  usage               DollUsage[]           @default([])
+  usageDetails        String?
+  profilePhotoId      String?
   appointments        appointments[]
   doll_issues         doll_issues[]
   doll_photos         doll_photos[]
@@ -497,6 +500,16 @@ enum DollGender {
   AUTRE
 }
 
+enum DollUsage {
+  COMPAGNIE
+  PHOTOS
+  MANNEQUIN
+  AMUSEMENT
+  COLLECTION
+  ARTISTIQUE
+  AUTRE
+}
+
 enum HeadMaterial {
   SILICONE
   TPE
@@ -619,4 +632,180 @@ enum PayoutStatus {
   PROCESSING
   PAID
   FAILED
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ██  ANALYTICS B2B — Écosystème de données commerciales anonymisées  ██
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Snapshots périodiques de statistiques agrégées (tendances temporelles)
+model analytics_snapshots {
+  id              String              @id @default(uuid())
+  period          AnalyticsPeriod     @default(DAILY)
+  snapshotDate    DateTime
+  data            Json                // Données agrégées complètes (structure libre)
+  totalDolls      Int                 @default(0)
+  totalUsers      Int                 @default(0)
+  totalIssues     Int                 @default(0)
+  totalMaintenance Int                @default(0)
+  avgDegradation  Float               @default(0)
+  createdAt       DateTime            @default(now())
+
+  @@unique([period, snapshotDate])
+  @@index([snapshotDate])
+  @@index([period])
+}
+
+/// Rapports pré-calculés par marque — le cœur du produit B2B
+model analytics_brand_reports {
+  id                    String   @id @default(uuid())
+  brand                 String
+  snapshotDate          DateTime
+  // ─── Volume ───
+  totalDolls            Int      @default(0)
+  marketSharePercent    Float    @default(0)
+  // ─── Défaillances ───
+  totalIssues           Int      @default(0)
+  failureRate           Float    @default(0) // issues / doll
+  avgDaysToFirstIssue   Float?             // jours entre acquisition et 1er problème
+  // ─── Défaillances par zone (JSON: { "GENOU_GAUCHE": 12, "BRAS_DROIT": 8, ... })
+  issuesByZone          Json     @default("{}")
+  issuesByType          Json     @default("{}")
+  issuesBySeverity      Json     @default("{}")
+  // ─── Matériaux ───
+  bodyMaterialBreakdown Json     @default("{}")  // { "TPE": 80, "SILICONE": 15, "HYBRID": 5 }
+  headMaterialBreakdown Json     @default("{}")
+  // ─── Maintenance ───
+  avgMaintenancePerDoll Float    @default(0)
+  maintenanceActions    Json     @default("{}")  // { "LAVAGE": 50, "REPARATION_PEAU": 12, ... }
+  // ─── Conditions moyennes ───
+  avgDegradation        Float    @default(0)
+  skinConditionBreakdown  Json   @default("{}")
+  jointConditionBreakdown Json   @default("{}")
+  // ─── Morphologie ───
+  avgSizeCm             Float?
+  avgWeightKg           Float?
+  // ─── Social / Popularité ───
+  avgLikeCount          Float    @default(0)
+  avgViewCount          Float    @default(0)
+  // ─── Durabilité score (calculé) ───
+  durabilityScore       Float?   // 0-100, plus c'est haut plus c'est durable
+  createdAt             DateTime @default(now())
+
+  @@unique([brand, snapshotDate])
+  @@index([brand])
+  @@index([snapshotDate])
+}
+
+/// Partenaires commerciaux B2B (marques qui achètent les données)
+model analytics_partners {
+  id              String              @id @default(uuid())
+  companyName     String
+  contactEmail    String              @unique
+  contactName     String?
+  phone           String?
+  website         String?
+  industry        String              @default("love_doll_manufacturer")
+  accessLevel     PartnerAccessLevel  @default(BASIC)
+  contractStart   DateTime?
+  contractEnd     DateTime?
+  monthlyFee      Float?
+  isActive        Boolean             @default(true)
+  notes           String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  api_keys        analytics_api_keys[]
+  exports         analytics_exports[]
+
+  @@index([isActive])
+}
+
+/// Clés API pour l'accès B2B
+model analytics_api_keys {
+  id              String              @id @default(uuid())
+  partnerId       String
+  keyHash         String              @unique    // Hash SHA-256, jamais la clé en clair
+  keyPrefix       String                         // ex: "soc_ak_" + 8 premiers chars pour identification
+  label           String              @default("default")
+  scopes          AnalyticsScope[]    @default([GLOBAL_STATS])
+  rateLimit       Int                 @default(100) // requêtes / heure
+  isActive        Boolean             @default(true)
+  lastUsedAt      DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime            @default(now())
+  partner         analytics_partners  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([keyHash])
+  @@index([partnerId])
+}
+
+/// Journal d'audit de chaque export de données (conformité RGPD)
+model analytics_exports {
+  id              String              @id @default(uuid())
+  partnerId       String?
+  exportedBy      String              // userId admin OU partnerId
+  exportType      ExportType
+  format          ExportFormat        @default(JSON)
+  scope           String              // description de ce qui a été exporté
+  filters         Json?               // filtres appliqués (marques, période, etc.)
+  rowCount        Int                 @default(0)
+  fileSize        Int?                // taille en octets
+  fileName        String?
+  // ─── Anonymisation ───
+  anonymized      Boolean             @default(true)
+  kAnonymityLevel Int                 @default(5) // seuil minimum d'agrégation
+  // ─── RGPD ───
+  legalBasis      String              @default("legitimate_interest_anonymized_aggregate")
+  retentionDays   Int                 @default(365)
+  expiresAt       DateTime?
+  createdAt       DateTime            @default(now())
+  partner         analytics_partners? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+
+  @@index([partnerId])
+  @@index([createdAt])
+  @@index([exportType])
+}
+
+// ─── Enums Analytics ───
+
+enum AnalyticsPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+}
+
+enum PartnerAccessLevel {
+  BASIC         // Stats globales agrégées
+  STANDARD      // + breakdown par marque (sans la leur)
+  PREMIUM       // + leur propre marque en détail + tendances
+  ENTERPRISE    // Tout + API temps réel + exports illimités
+}
+
+enum AnalyticsScope {
+  GLOBAL_STATS
+  BRAND_REPORTS
+  FAILURE_ANALYSIS
+  MATERIAL_ANALYSIS
+  MAINTENANCE_INSIGHTS
+  MARKET_INTELLIGENCE
+  MORPHOLOGY_TRENDS
+  SOCIAL_ENGAGEMENT
+  FULL_ACCESS
+}
+
+enum ExportType {
+  GLOBAL_REPORT
+  BRAND_REPORT
+  FAILURE_ANALYSIS
+  MATERIAL_DURABILITY
+  MARKET_TRENDS
+  CUSTOM_QUERY
+}
+
+enum ExportFormat {
+  JSON
+  CSV
+  PDF
 }

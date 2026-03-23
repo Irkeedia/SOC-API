@@ -2,10 +2,12 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { DegradationService } from './services/degradation.service';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { UploadService } from '../common/services/upload.service';
 import {
   CreateDollDto,
   UpdateDollDto,
@@ -19,6 +21,7 @@ export class DollsService {
     private readonly prisma: PrismaService,
     private readonly degradation: DegradationService,
     private readonly subscriptionService: SubscriptionService,
+    private readonly upload: UploadService,
   ) {}
 
   async create(userId: string, dto: CreateDollDto) {
@@ -94,7 +97,7 @@ export class DollsService {
     const dolls = await this.prisma.dolls.findMany({
       where: { ownerId: userId },
       include: {
-        doll_photos: { orderBy: { sortOrder: 'asc' }, take: 1 },
+        doll_photos: { orderBy: { sortOrder: 'asc' } },
         _count: { select: { maintenance_records: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -210,6 +213,94 @@ export class DollsService {
       orderBy: { likeCount: 'desc' },
       skip,
       take: limit,
+    });
+  }
+
+  // === Photos ===
+
+  private static readonly MAX_PHOTOS_PER_DOLL = 10;
+  private static readonly MAX_TOTAL_PHOTOS_PER_USER = 200;
+
+  async uploadPhoto(dollId: string, userId: string, file: Express.Multer.File, caption?: string) {
+    if (!file) throw new BadRequestException('Aucun fichier envoyé.');
+    this.upload.validateImage(file.mimetype, file.size);
+    await this.ensureOwnership(dollId, userId);
+
+    // Protection 1 : max photos par doll
+    const count = await this.prisma.doll_photos.count({ where: { dollId } });
+    if (count >= DollsService.MAX_PHOTOS_PER_DOLL) {
+      throw new BadRequestException(
+        `Limite atteinte : ${DollsService.MAX_PHOTOS_PER_DOLL} photos maximum par doll.`,
+      );
+    }
+
+    // Protection 2 : max photos globales par utilisateur
+    const totalUserPhotos = await this.prisma.doll_photos.count({
+      where: { dolls: { ownerId: userId } },
+    });
+    if (totalUserPhotos >= DollsService.MAX_TOTAL_PHOTOS_PER_USER) {
+      throw new BadRequestException(
+        `Limite globale atteinte : ${DollsService.MAX_TOTAL_PHOTOS_PER_USER} photos maximum par compte.`,
+      );
+    }
+
+    const { url } = await this.upload.upload(file.buffer, `dolls/${dollId}`, file.mimetype);
+
+    return this.prisma.doll_photos.create({
+      data: {
+        dollId,
+        url,
+        caption: caption || null,
+        sortOrder: count,
+      },
+    });
+  }
+
+  async removePhoto(photoId: string, userId: string) {
+    const photo = await this.prisma.doll_photos.findUnique({
+      where: { id: photoId },
+      include: { dolls: { select: { ownerId: true } } },
+    });
+    if (!photo) throw new NotFoundException('Photo introuvable.');
+    if (photo.dolls.ownerId !== userId) throw new ForbiddenException('Accès non autorisé.');
+
+    // Supprimer de R2
+    const key = this.upload.keyFromUrl(photo.url);
+    if (key) await this.upload.delete(key);
+
+    return this.prisma.doll_photos.delete({ where: { id: photoId } });
+  }
+
+  async updatePhoto(photoId: string, userId: string, data: { caption?: string; sortOrder?: number }) {
+    const photo = await this.prisma.doll_photos.findUnique({
+      where: { id: photoId },
+      include: { dolls: { select: { ownerId: true } } },
+    });
+    if (!photo) throw new NotFoundException('Photo introuvable.');
+    if (photo.dolls.ownerId !== userId) throw new ForbiddenException('Accès non autorisé.');
+
+    return this.prisma.doll_photos.update({
+      where: { id: photoId },
+      data: {
+        ...(data.caption !== undefined && { caption: data.caption }),
+        ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
+      },
+    });
+  }
+
+  async setProfilePhoto(dollId: string, userId: string, photoId: string) {
+    await this.ensureOwnership(dollId, userId);
+
+    // Vérifier que la photo appartient bien à cette doll
+    const photo = await this.prisma.doll_photos.findUnique({ where: { id: photoId } });
+    if (!photo || photo.dollId !== dollId) {
+      throw new BadRequestException('Cette photo n\'appartient pas à cette doll.');
+    }
+
+    return this.prisma.dolls.update({
+      where: { id: dollId },
+      data: { profilePhotoId: photoId },
+      include: { doll_photos: { orderBy: { sortOrder: 'asc' } } },
     });
   }
 
